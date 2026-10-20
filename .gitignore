@@ -1,0 +1,13 @@
+.gradle/
+.gradle-user/
+.tools/
+build/
+run/
+run-*/
+.idea/
+*.iml
+.vscode/
+logs/
+crash-reports/
+*.hprof
+.env
