@@ -39,12 +39,15 @@ public final class SitePlanner {
     private static void reject(WorkContext c,String reason) { c.plan().siteRejections.merge(reason,1,Integer::sum); }
     public String validate(WorkContext c,Blueprints.Blueprint bp,Pos site) {
         if(!c.village().contains(site)||!c.village().contains(site.offset(bp.width(),3,bp.depth())))return "BOUNDARY";
-        for(Plan other:c.village().plans.values()) {
+        for(var building:c.village().buildings.values())
+            if(Math.abs(building.origin.x()-site.x())<bp.width()+3&&Math.abs(building.origin.z()-site.z())<bp.depth()+3)return "COLLISION";
+        for(Plan other:c.village().activePlans()) {
             if(other==c.plan()||other.site==null||other.state()==State.CANCELLED||other.state()==State.FAILED)continue;
             if(Math.abs(other.site.x()-site.x())<bp.width()+3&&Math.abs(other.site.z()-site.z())<bp.depth()+3)return "COLLISION";
         }
         for(int x=0;x<bp.width();x++)for(int z=0;z<bp.depth();z++) {
             BlockPos p=block(site.offset(x,0,z));
+            if(!dev.livingvillages.world.Ownership.owns(c.level(),c.village(),of(p)))return "BOUNDARY";
             if(!c.level().hasChunkAt(p))return "CHUNK_UNAVAILABLE";
             var support=c.level().getBlockState(p.below());
             if(!support.getFluidState().isEmpty())return "WATER";

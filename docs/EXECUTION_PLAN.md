@@ -109,3 +109,41 @@ without prefilled planks, producing them from physical logs through the planner.
 Architecture/resource/retry/client-separation review is recorded in
 `ARCHITECTURE_REVIEW.md`; remaining acceptance work is recorded explicitly in
 `ACCEPTANCE_RESULTS.md` and `V1_1_BACKLOG.md`.
+
+## v1.0 acceptance and hardening pass
+
+Scope is frozen: no v1.1 gameplay. Dependency order:
+
+1. Review all requirements and current source; identify lifecycle, ownership,
+   persistence, resource and hot-path defects.
+2. Harden ownership/state/persistence invariants, then test regressions.
+3. Exercise Ledger authorization, bounded snapshots and empty/long data; prepare
+   explicit graphical manual procedure without claiming a visual pass.
+4. Run a two-process persisted-world fixture if the available server runner
+   permits it. Distinguish this controlled fixture from an ordinary-world manual
+   restart and record any remaining gap.
+5. Run multiple-village soak with real workers, bounded counters and isolation
+   assertions; report duration and workload rather than claiming unlimited scale.
+6. Run `test`, `runGameTestServer`, `build`; update A1–A20 with explicit statuses,
+   evidence and exact manual procedures. Keep the artifact `1.0.0-dev`.
+
+Implemented in this pass: deterministic boundary ownership; duplicate-stock
+protection; unreadable-save fallback guard; terminal-state atomicity; active-plan
+indexes; bounded Ledger data/diagnostics; safer refresh handling; loaded-index
+cleanup; retry event deduplication; server-thread assertion and measured soak
+counters. No v1.1 gameplay or archival subsystem was introduced.
+
+The external restart test passed in two JVMs, preserving the same real world
+files and completing the resumed house with zero remaining/duplicated material.
+The main suite now has 13 JUnit tests and 28 GameTests, including 48,000 ticks
+with three villages and 36 villagers. The soak fixture clears its own remote
+plots before reuse so repeated runs do not inherit the previous test's houses.
+See ACCEPTANCE_RESULTS.md for exact evidence/statuses and MANUAL_ACCEPTANCE.md
+for the unperformed manual gates.
+
+Final hardening regression: **BUILD SUCCESSFUL**, 13 JUnit tests and all 28
+required GameTests passed. The external two-process test separately passed both
+phases. Final evidence is in .tools/hardening-final.log and
+run-restart-20261020-170707. README, CHANGELOG, architecture review and acceptance
+matrix are updated. The existing v1.1 backlog is unchanged: no newly discovered
+future gameplay task justified expanding it during this pass.

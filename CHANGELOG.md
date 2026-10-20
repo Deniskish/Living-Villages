@@ -2,6 +2,29 @@
 
 ## 1.0.0-dev — 2026-10-20
 
+### Acceptance and hardening pass
+
+- Added two-JVM world restart verification, inventory reconciliation and resumed
+  construction using real region/entity/SavedData files.
+- Added a 48,000-tick, three-village / 36-citizen soak with actual chunk unloading,
+  ownership assertions and bounded work/scan/planning measurements.
+- Fixed overlapping-village storage ownership and duplicate position counts.
+- Prevented Minecraft's SavedData fallback from replacing an unreadable existing
+  save; made terminal work operations atomic and completion idempotent.
+- Bounded Ledger snapshots and diagnostic expansion, reduced history lookup
+  costs, validated Book/bell refresh access and supported secondary bells.
+- Preserved the selected Ledger tab on refresh, prevented late refresh from
+  reopening a closed screen, cached wrapping and adapted tabs to narrow screens.
+- Removed completed-plan archives from frequent scheduling/lookup paths;
+  released unloaded village indexes and suppressed duplicate retry assignment
+  events. Preserved all permanent history.
+- Fixed reachable-container arrival range, loaded-chunk checks in pen searches
+  and resource/data pack format metadata.
+- Added explicit A1–A20 statuses and manual Ledger/restart/survival procedures.
+  The version remains a development build; visual acceptance is unperformed.
+
+### Initial implementation
+
 - Added the pinned Minecraft 1.21.1 / NeoForge / Java 21 build and Gradle wrapper.
 - Added UUID village/citizen registration, versioned server persistence, per-role
   XP, generic skills, history and recovery diagnostics.

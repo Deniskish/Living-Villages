@@ -12,7 +12,8 @@ import static dev.livingvillages.world.Positions.*;
 public final class AnimalJob implements Job {
     @Override public void tick(WorkContext c) {
         List<Animal> animals=c.level().getEntitiesOfClass(Animal.class,new AABB(block(c.village().center)).inflate(c.village().radius),
-                a->a instanceof Cow||a instanceof Sheep||a instanceof Pig||a instanceof Chicken);
+                a->(a instanceof Cow||a instanceof Sheep||a instanceof Pig||a instanceof Chicken)
+                        &&dev.livingvillages.world.Ownership.owns(c.level(),c.village(),of(a.blockPosition())));
         // Reserve room for all pregnancies, not just currently spawned animals.
         long pending=animals.stream().filter(Animal::isInLove).count();
         if(animals.size()+pending>=VillageConfig.ANIMAL_CAP.get()) { c.finish();return; }
@@ -39,7 +40,9 @@ public final class AnimalJob implements Job {
             if(!seen.add(next))continue;
             if(seen.size()>81||!c.level().hasChunkAt(next))return false;
             for(Direction d:Direction.Plane.HORIZONTAL) {
-                BlockPos n=next.relative(d);var state=c.level().getBlockState(n);
+                BlockPos n=next.relative(d);
+                if(!c.level().hasChunkAt(n))return false;
+                var state=c.level().getBlockState(n);
                 if(state.is(BlockTags.FENCES)||state.is(BlockTags.FENCE_GATES)||state.isSolid())continue;
                 if(!seen.contains(n))queue.add(n);
             }

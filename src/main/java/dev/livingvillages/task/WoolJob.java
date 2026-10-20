@@ -28,7 +28,8 @@ public final class WoolJob implements Job {
             }
         }
         Sheep sheep=c.level().getEntitiesOfClass(Sheep.class,new AABB(block(c.village().center)).inflate(c.village().radius),
-                s->s.readyForShearing()&&s.getColor()==DyeColor.WHITE).stream().findFirst().orElse(null);
+                s->s.readyForShearing()&&s.getColor()==DyeColor.WHITE
+                        &&dev.livingvillages.world.Ownership.owns(c.level(),c.village(),of(s.blockPosition()))).stream().findFirst().orElse(null);
         if(sheep==null) { c.block(Reason.TARGET_MISSING,"No shearable white sheep in village boundary");return; }
         if(!c.move(of(sheep.blockPosition())))return;
         c.task().target=of(sheep.blockPosition());sheep.shear(SoundSource.NEUTRAL);

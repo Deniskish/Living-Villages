@@ -9,7 +9,16 @@ public final class VillageSavedData extends SavedData {
     public Model.World world=new Model.World();
     public static VillageSavedData get(ServerLevel level) {
         return level.getDataStorage().computeIfAbsent(
-                new Factory<>(VillageSavedData::new,VillageSavedData::load,null),"livingvillages");
+                new Factory<>(()->createNew(net.minecraft.world.level.dimension.DimensionType.getStorageFolder(
+                        level.dimension(),level.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT))
+                        .resolve("data/livingvillages.dat")),VillageSavedData::load,null),"livingvillages");
+    }
+    public static VillageSavedData createNew(java.nio.file.Path existingFile) {
+        // DimensionDataStorage catches deserializer exceptions and returns null.
+        // Its fallback constructor must never replace an unreadable existing save.
+        if(java.nio.file.Files.exists(existingFile))
+            throw new IllegalStateException("Refusing to replace unreadable Living Villages save: "+existingFile);
+        return new VillageSavedData();
     }
     public static VillageSavedData load(CompoundTag tag,HolderLookup.Provider registries) {
         VillageSavedData data=new VillageSavedData();

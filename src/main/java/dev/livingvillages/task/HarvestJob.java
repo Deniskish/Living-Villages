@@ -100,7 +100,7 @@ public final class HarvestJob implements Job {
         } else c.block(Reason.WORLD_CHANGED,"World rejected harvest");
     }
     private boolean valid(WorkContext c,Pos p) {
-        if(!c.village().contains(p)||!c.level().hasChunkAt(block(p)))return false;
+        if(!dev.livingvillages.world.Ownership.owns(c.level(),c.village(),p)||!c.level().hasChunkAt(block(p)))return false;
         var s=c.level().getBlockState(block(p));
         if(c.village().buildings.values().stream().anyMatch(b->b.origin.distanceSquared(p)<100))return false;
         if(c.task().role==Role.FARMER)return s.getBlock() instanceof CropBlock crop&&crop.isMaxAge(s);

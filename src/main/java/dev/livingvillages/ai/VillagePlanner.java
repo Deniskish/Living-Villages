@@ -33,7 +33,7 @@ public final class VillagePlanner {
         v.needs.put(Need.STONE,Rules.shortage(stock.getOrDefault("minecraft:cobblestone",0),128));
         v.needs.put(Need.METAL,Rules.shortage(stock.getOrDefault("minecraft:iron_ingot",0),6));
         v.needs.put(Need.TOOLS,Rules.shortage(stock.getOrDefault("minecraft:wooden_pickaxe",0)+stock.getOrDefault("minecraft:stone_pickaxe",0),1));
-        boolean storageBlocked=v.plans.values().stream().anyMatch(p->!p.state().terminal()&&p.blocker!=null&&p.blocker.type()==Reason.STORAGE_FULL);
+        boolean storageBlocked=v.activePlans().stream().anyMatch(p->p.blocker!=null&&p.blocker.type()==Reason.STORAGE_FULL);
         v.needs.put(Need.STORAGE,v.storage.isEmpty()||storageBlocked?1.0:0.0);
         v.needs.put(Need.WORKFORCE,Rules.shortage(population,6));
         v.goals.clear();
@@ -47,7 +47,7 @@ public final class VillagePlanner {
                 case TOOLS -> observed.tables.isEmpty()?0.5:1;
                 default -> 1;
             };
-            double cooldown=v.plans.values().stream().anyMatch(p->p.need==need&&!p.state().terminal())?0.7:1;
+            double cooldown=v.activePlans().stream().anyMatch(p->p.need==need)?0.7:1;
             v.goals.add(Rules.goal(need,urgency,feasibility,cooldown));
         });
         v.goals.sort(Comparator.comparingDouble(Goal::utility).reversed());
@@ -104,8 +104,7 @@ public final class VillagePlanner {
             infrastructure(level,v,"animal_pen_t1",Need.FOOD);
             ensure(level,v,"BREED_ANIMALS",Need.FOOD,Role.ANIMAL_KEEPER,0.2,"");
         }
-        for(Plan p:List.copyOf(v.plans.values())) {
-            if(p.state().terminal()) { p.reservations.clear();continue; }
+        for(Plan p:v.activePlans()) {
             if(p.kind.startsWith("CRAFT:")) {
                 var recipe=ProductionJob.recipe(p.tasks.getFirst().item);
                 if(recipe!=null)p.requirements=new TreeMap<>(recipe.ingredients());
@@ -136,7 +135,7 @@ public final class VillagePlanner {
         }
         for(Building building:v.buildings.values()) {
             String kind="ROAD:"+building.id;
-            if(v.plans.values().stream().anyMatch(p->p.kind.equals(kind)))continue;
+            if(v.latestPlan(kind).isPresent())continue;
             Pos target=observed.paths.stream().filter(p->p.y()==building.origin.y()-1)
                     .min(Comparator.comparingLong(p->p.distanceSquared(building.entrance))).orElse(null);
             if(target==null||target.distanceSquared(building.entrance)>144)continue;
@@ -153,7 +152,7 @@ public final class VillagePlanner {
         }
         // Deterministic priority order; claims are rebuilt against physical stock each strategic tick.
         Map<String,Integer> claimed=new TreeMap<>();
-        v.plans.values().stream().filter(p->!p.state().terminal()).sorted(Comparator.comparingDouble((Plan p)->p.priority).reversed())
+        v.activePlans().stream().sorted(Comparator.comparingDouble((Plan p)->p.priority).reversed())
                 .forEach(p->{p.reservations=Rules.reserve(stock,claimed,p.requirements);p.reservations.forEach((k,n)->claimed.merge(k,n,Integer::sum));});
         v.lastPlanTick=now;
     }
@@ -200,10 +199,11 @@ public final class VillagePlanner {
     public Plan ensure(ServerLevel level,Village v,String kind,Need need,Role role,double priority,String item) {
         Plan existing=v.active(kind).orElse(null);
         if(existing!=null) { existing.priority=Math.max(existing.priority,priority);return existing; }
-        if(v.plans.values().stream().anyMatch(p->p.kind.equals(kind)&&p.state()==State.FAILED))return null;
+        Plan latest=v.latestPlan(kind).orElse(null);
+        if(latest!=null&&latest.state()==State.FAILED)return null;
         long cooldown=kind.startsWith("CRAFT:")||kind.equals("GATHER_WOOD")||kind.equals("MINE")?40:1200;
-        if(v.plans.values().stream().anyMatch(p->p.kind.equals(kind)&&p.state().terminal()&&level.getGameTime()-p.lastProgressTick<cooldown))return null;
-        if(v.plans.values().stream().filter(p->!p.state().terminal()).count()>=VillageConfig.ACTIVE_PLANS.get())return null;
+        if(latest!=null&&latest.state().terminal()&&level.getGameTime()-latest.lastProgressTick<cooldown)return null;
+        if(v.activePlans().size()>=VillageConfig.ACTIVE_PLANS.get())return null;
         Plan p=new Plan();p.village=v.id;p.kind=kind;p.need=need;p.priority=priority;p.createdAt=level.getGameTime();
         p.lastProgressTick=p.createdAt;p.goal=v.goals.stream().filter(g->g.need()==need).findFirst()
                 .orElse(Rules.goal(need,v.needs.getOrDefault(need,1.0),1,1));

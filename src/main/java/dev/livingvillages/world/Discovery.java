@@ -27,7 +27,6 @@ public final class Discovery {
                     v.name="Village "+Math.abs(center.x())+" / "+Math.abs(center.z());v.createdAt=level.getGameTime();
                     world.villages.put(v.id,v);chronicle.emit(v,level.getGameTime(),"VILLAGE_REGISTERED",null,v.id,v.name);
                 }
-                register(level,world,v,entities);
             }
         }
         for(Village v:world.villages.values()) if(level.hasChunkAt(block(v.center)))
@@ -35,6 +34,7 @@ public final class Discovery {
     }
     private void register(ServerLevel level,World world,Village v,List<Villager> entities) {
         for(Villager entity:entities) {
+            if(Ownership.at(world.villages.values(),of(entity.blockPosition())).filter(owner->owner.id.equals(v.id)).isEmpty())continue;
             if(world.villages.values().stream().anyMatch(other->other.citizens.containsKey(entity.getUUID())))continue;
             Citizen c=new Citizen();c.id=entity.getUUID();c.village=v.id;c.registeredAt=level.getGameTime();
             String[] names={"Anna","Erik","Mira","Hans","Lina","Otto","Ada","Finn","Nora","Leo","Elsa","Emil"};

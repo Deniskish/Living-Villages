@@ -18,7 +18,8 @@ public final class Inventories {
     }
     public static Map<String,Integer> stock(ServerLevel level,Village v) {
         Map<String,Integer> result=new TreeMap<>();
-        for(Pos p:List.copyOf(v.storage)) {
+        for(Pos p:new LinkedHashSet<>(v.storage)) {
+            if(!dev.livingvillages.world.Ownership.owns(level,v,p)) { v.storage.removeIf(p::equals);continue; }
             if(!level.hasChunkAt(block(p)))continue;
             Container container=container(level,p);
             if(container==null) { v.storage.remove(p);continue; }

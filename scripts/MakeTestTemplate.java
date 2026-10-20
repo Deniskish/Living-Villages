@@ -18,5 +18,8 @@ class MakeTestTemplate {
             }
             out.writeByte(0);
         }
+        Path restart=Path.of("src/main/resources/data/livingvillages_restart/structure/empty.nbt");
+        Files.createDirectories(restart.getParent());
+        Files.copy(output,restart,StandardCopyOption.REPLACE_EXISTING);
     }
 }

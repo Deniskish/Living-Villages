@@ -11,10 +11,23 @@ public final class StateCodec {
     public static World decode(String json) {
         World world=GSON.fromJson(json,World.class);
         if(world==null||world.version!=1) throw new IllegalArgumentException("Unsupported Living Villages save version");
+        var owners=new java.util.HashSet<java.util.UUID>();
         for(Village village:world.villages.values()) {
+            village.citizens.entrySet().removeIf(entry->{
+                if(owners.add(entry.getKey()))return false;
+                world.recoveryNotes.add("Removed duplicate citizen membership "+entry.getKey()+" from "+village.id);return true;
+            });
             village.storage=new java.util.ArrayList<>(new java.util.LinkedHashSet<>(village.storage));
             var assignments=new java.util.HashMap<java.util.UUID,java.util.UUID>();
             for(Plan plan:village.plans.values()) {
+                plan.village=village.id;
+                if(plan.state().terminal()) {
+                    plan.reservations.clear();
+                    for(Task task:plan.tasks) {
+                        if(!task.state().terminal())task.transition(State.CANCELLED);
+                        task.worker=null;
+                    }
+                }
                 if(plan.state()==State.BLOCKED&&plan.blocker==null)
                     throw new IllegalArgumentException("Corrupt plan without diagnostic: "+plan.id);
                 for(Task task:plan.tasks) {
@@ -32,6 +45,7 @@ public final class StateCodec {
                 }
             }
             for(Citizen c:village.citizens.values()) {
+                c.village=village.id;
                 var task=assignments.get(c.id);
                 if(!java.util.Objects.equals(c.currentTask,task)) {
                     c.currentTask=task;c.activity="RECOVERED_ASSIGNMENT";

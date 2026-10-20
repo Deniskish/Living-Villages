@@ -14,6 +14,7 @@ public final class PlaceUtilityJob implements Job {
             for(int r=2;r<7&&c.task().target==null;r++)for(Direction d:Direction.Plane.HORIZONTAL) {
                 var p=block(c.village().center).relative(d,r);
                 if(!c.level().hasChunkAt(p))continue;
+                if(!dev.livingvillages.world.Ownership.owns(c.level(),c.village(),of(p)))continue;
                 if(c.village().plans.values().stream().anyMatch(plan->plan.site!=null
                         &&p.getX()>=plan.site.x()&&p.getX()<plan.site.x()+6&&p.getZ()>=plan.site.z()&&p.getZ()<plan.site.z()+6))continue;
                 if(c.level().getBlockState(p).isAir()&&c.level().getBlockState(p.below()).isFaceSturdy(c.level(),p.below(),Direction.UP))

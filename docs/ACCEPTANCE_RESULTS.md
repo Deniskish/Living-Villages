@@ -1,91 +1,144 @@
-# Acceptance evidence — 2026-10-20
+# v1.0 acceptance and hardening — 2026-10-20
 
-Artifact: `livingvillages-1.0.0-dev.jar`. Minecraft 1.21.1, NeoForge 21.1.262,
-Java 21, Gradle 9.2.1. This report distinguishes executable evidence from
-unperformed manual release acceptance.
+Artifact remains **1.0.0-dev**, Minecraft 1.21.1 / NeoForge 21.1.262 / Java 21.
+No graphical acceptance or ordinary generated-world playthrough is claimed.
 
-## Reproduction
+## Reproduction and evidence
 
-```powershell
-.\scripts\gradle.ps1 test build runGameTestServer
-```
+Run the wrapper using scripts/gradle.ps1 with arguments: **test runGameTestServer build**.
+Run **scripts/acceptance-restart.ps1** for two separate server JVMs against the
+same isolated world. It preserves logs/worlds in a new run-restart-TIMESTAMP
+directory and never deletes earlier evidence.
 
-The script invokes the checked-in Gradle wrapper with the workspace JDK when
-available. With a configured Java 21 installation, the equivalent commands are
-`gradlew test`, `gradlew build`, and `gradlew runGameTestServer`.
+- JUnit: **13 tests**, zero skipped/failures/errors; build/reports/tests/test/index.html.
+- Main dedicated-server suite: **28 required GameTests**.
+- External restart: **one test in each of two processes**, both passed.
+  Evidence: run-restart-20261020-170707/Write.log and Read.log.
+- Final regression log: .tools/hardening-final.log.
+- Final regression result: **BUILD SUCCESSFUL**, all 28 required GameTests passed,
+  no errors in the test/server log. JAR SHA-256:
+  3042B81B98EAE6477C7A33B784AE246D686FC18AFB8CB1A7B4001851DB8FFA95.
+- Earlier measured soak: .tools/hardening-check.log.
+- Generated reports and test worlds are ignored by Git.
 
-JUnit report: `build/reports/tests/test/index.html`.
-GameTest output: `run-gametest/logs/latest.log`.
-Final combined verification log in this workspace: `.tools/verification.log`.
-These generated files and test worlds are deliberately ignored by Git.
+Test names below refer to VillageGameTests unless a different class is named.
+PASS_GAMETEST establishes the stated controlled-world behavior.
+PASS_AUTOMATED includes deterministic or cross-process verification.
+PARTIAL means the entire scenario has not been accepted.
+Procedures M1–M3 are in [MANUAL_ACCEPTANCE.md](MANUAL_ACCEPTANCE.md).
 
-## Scenario coverage
+## A1–A20
 
-“Automated” below means the described fixture passed, not that every possible
-survival-world variation of the acceptance scenario has been exercised.
+| ID | Status | Concrete evidence | Remaining coverage / limitation |
+|---|---|---|---|
+| A1 | PARTIAL | bellVillageRegistersExactlyOnce; RestartGameTests.externalProcessRestart discovers a real bell/villager and reloads the same VillageId/membership in a new JVM. | M1/M2: naturally generated village with a real client. |
+| A2 | PASS_AUTOMATED | DomainTest.roundTripPreservesIdentityProgressDiagnosticsAndHistory; savedDataAndVanillaCargoRoundTrip; external restart asserts name, role, level, XP, skills and membership. | Controlled fixture passed; ordinary-world lifecycle remains M2. |
+| A3 | PASS_GAMETEST | lumberjackWalksHarvestsCollectsAndDelivers; HardeningGameTests.threeVillagesThirtySixCitizensSoak observes forestry XP in each village. | Small reachable trees; biome/long-term balance is M3. |
+| A4 | PARTIAL | unreachableTreeBacksOffAndRecoversWhenOpened asserts spaced retries, BLOCKED and parent reason; ledgerSnapshotPreservesDiagnosticsAndPermissions checks diagnostic data. | Graphical display during this failure is M1. |
+| A5 | PASS_GAMETEST | constructionCannotPlaceWithoutMaterials; reservationsProtectAnotherPlansPhysicalItems; autonomous house fixture produces missing planks from physical logs. | Simultaneous survival shortages are M3. |
+| A6 | PARTIAL | DomainTest.dependenciesExplainMissingAndCyclicReferences; autonomous material dependencies and the shared diagnostic tree are exercised. | Full housing → missing planks → unreachable forestry chain in the client remains M1/M2. |
+| A7 | PARTIAL | unreachableTreeBacksOffAndRecoversWhenOpened resumes delivery without editing plans; external restart resumes construction to completion. | These are separate fixtures; full A6-to-house recovery remains manual. |
+| A8 | PARTIAL | siteValidationRejectsWaterAndPlayerStructures; DomainTest.sitesRejectWaterSlopeCollisionAndUnsupportedTerrain; autonomous real-site selection. | More steep/inaccessible-entrance world layouts need M3. |
+| A9 | PASS_GAMETEST | builderCompletesRealHouseProgressively verifies manifest, movement, staged placement, completion and restoration; villageAutonomouslyPlansAssignsAndBuildsHouse also produces required planks. | Visual inspection of all six templates is M1/M3. |
+| A10 | PARTIAL | playerObstructionDoesNotSpendMaterial preserves the diamond block and materials. | Obstruction precedes first placement; repeated mid-build entrance/roof edits remain M3. |
+| A11 | PASS_GAMETEST | destroyedStorageInvalidatesPhysicalStock; transferConservesItemsWhenDestinationIsFull; HardeningGameTests.overlappingVillagesNeverDoubleCountStorage. | Concurrent multi-storage disruption remains M3. |
+| A12 | PASS_AUTOMATED | builderCompletesRealHouseProgressively; largeChronicleSurvivesCompressedNbt; external restart loads real region/entity/SavedData files, compares state and reconciles cargo + chest with the remaining manifest. | Ordinary generated-world restart is M2 / MANUAL_REQUIRED. |
+| A13 | PARTIAL | deathReleasesTaskAndDropsCargo checks death, released ownership, blocker, removed inventory cargo and history. | Replacement worker completing the same job in a longer session is M3. |
+| A14 | PASS_AUTOMATED | DomainTest.experienceBoundariesAndMiningGates; physical jobs award XP; external restart checks earned role/skill XP and levels after a completed house. | Client observation of repeated level-ups is M1/M3. |
+| A15 | PARTIAL | minerUsesActualToolLootAndDelivers checks real stone loot/tool durability; domain tests check tier gates and diamond exclusion. | Actual ore fixtures at every tier are not covered. |
+| A16 | PARTIAL | farmerHarvestsReplantsAndDelivers plus farming in all three soak villages. | Wheat passed; other crops and player field changes need M3. |
+| A17 | PASS_GAMETEST | boundedPenBreedingConsumesFood; animalCapDoesNotConsumeFood. | Full offspring/pen lifecycle and balance remain M3. |
+| A18 | PARTIAL | smithUsesVanillaRecipeAndExactIngredients; furnaceConsumesRealFuelAndProducesIron; miner equipment/durability test. | Worn tool → replacement demand → crafting → re-equipment chain remains M3. |
+| A19 | PARTIAL | ledgerSnapshotPreservesDiagnosticsAndPermissions; HardeningGameTests.ledgerBookBellAuthorizationAndMissingVillage checks Book/bell, removed bell, unknown/deleted village; ledgerLargeAndEmptyDataRemainBounded exercises null/empty/long/escaped/large data. | Actual click → packet → rendered screen, resize/close/reopen is M1 / MANUAL_REQUIRED. |
+| A20 | PASS_AUTOMATED | Wrapper test, runGameTestServer, build: 13 JUnit tests, 28 main GameTests; both external restart phases separately pass. | Unperformed manual scenarios remain unaccepted. |
 
-| Scenario | Automated evidence | Remaining scope |
+## External restart
+
+RestartGameTests.externalProcessRestart uses an isolated flat GameTest world.
+Process one discovers a bell/villager, supplies real physical materials, drives
+movement/construction, completes one house and saves at 20 blocks of a second.
+The checkpoint has three plans, a completed building, earned XP/skills,
+dependencies, a structured blocked plan and history.
+
+The process exits normally. A second JVM loads the same files; it does not call
+Villager.load() or inject inventory copies. It checks identities/state, waits
+for real entity storage, reconciles actual chest + cargo against the remaining
+manifest, and completes exactly one more building. Final evidence:
+**buildings=2 physical_remaining=0**, VillageId
+fa65caa1-1ad3-4b35-955d-ad1b7e44af8b.
+
+The fixture controls construction scheduling and freezes other planning.
+GameTest world settings/clock initialization differ from normal server startup.
+The blocked plan is a diagnostic fixture, not a forest blockage generated in
+this test. This is real process/file persistence evidence, not a substitute for
+the ordinary generated-world procedure M2.
+
+## Multi-village soak
+
+HardeningGameTests.threeVillagesThirtySixCitizensSoak executes **48,000 ticks**
+with three independent villages and **36 actual villagers**. That represents
+40 minutes at 20 TPS, accelerated by GameTest, not 40 wall-clock minutes.
+Daylight is fixed and GameTest random ticking is disabled. Each village has
+controlled flat terrain, physical supplies, mature wheat, a tree and exposed stone.
+
+The third village loses its test-only chunk tickets at tick 8,000; its center
+must actually be unloaded at 11,500 and is reloaded at 12,000. Production code
+does not create these tickets.
+
+Measured final successful run in .tools/hardening-final.log:
+
+| Village | Citizens | Total / active plans | Events | Houses | Scan steps | Strategies | Work calls | Mean / max work call |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Soak 0 | 12 | 76 / 5 | 408 | 2 | 4,800 | 240 | 1,979 | 86 / 4,468 µs |
+| Soak 1 | 12 | 52 / 4 | 280 | 2 | 4,800 | 240 | 1,433 | 89 / 1,480 µs |
+| Soak 2 | 12 | 98 / 6 | 489 | 2 | 4,400 | 220 | 2,058 | 84 / 1,402 µs |
+
+Assertions cover unique citizen/plan/task/storage/history ownership, unique
+active kinds, plan cap, explained BLOCKED state, bounded plan/event growth,
+scan/strategy frequency and aggregate worker budget. Each village must build
+and gain forestry/farming XP. Timing measures job execution only, not whole
+Minecraft ticks, frame rate or saving. Measurements vary between runs.
+
+## Findings and fixes
+
+- Duplicate storage references and overlapping boundaries could count a chest
+  twice/across villages. Counts now deduplicate positions. Nearest-center
+  ownership with UUID tie-break is shared by discovery, stock, harvesting,
+  building sites and bell resolution.
+- Minecraft catches SavedData deserializer errors and invokes a fallback
+  constructor. That constructor now refuses to replace an existing unreadable
+  save. corruptExistingSaveCannotBeReplaced verifies refusal and unchanged bytes;
+  it tests the guard, not every possible disk fault.
+- Terminal progress/block operations previously changed metadata before throwing.
+  They now validate first; completion is idempotent. Restore clears terminal
+  claims and cancels orphan active tasks.
+- Ledger bounds rows, strings, diagnostic expansion and escaped JSON size;
+  personal events use one bounded scan instead of full-history scans per citizen.
+  Empty snapshots and secondary-bell refresh are handled.
+- Client refresh cannot reopen a closed screen. Tabs survive refresh and wrap
+  on narrow layouts; detail wrapping is cached; title/footer text is clipped.
+  These changes compile, but visual acceptance remains manual.
+- Active/latest-kind indexes remove terminal archives from frequent work.
+  Unloaded/removed villages release indexes and stop strategic scans. Scan cursor
+  uses long arithmetic. Same-worker retries no longer emit duplicate assignment
+  events.
+- Container arrival range covers legal adjacent approach positions while
+  retaining line of sight and a three-block distance limit. This fixes a farmer
+  delivery regression at a reachable chest.
+- Animal pen searches check neighboring chunks before reading them. Simulation
+  entry asserts the server thread. Pack metadata supports both 1.21.1 data and
+  resource formats.
+
+## Remaining release gates
+
+| Gate | Status | Procedure |
 |---|---|---|
-| A1 Registration | A real bell/POI and villagers register once; repeated discovery after domain reload preserves the village ID. | Discovery in a naturally generated village during a client playthrough. |
-| A2 Citizen identity | Domain identity, name, role, XP, history and assignments round-trip; vanilla entity UUID and actual carried items round-trip through NBT. Duplicate/missing saved workers are diagnosed and repaired. | A real server process restart and repeated entity unload/reload. |
-| A3 Lumberjack | A real villager walks to a tree, breaks its blocks, collects item entities, delivers logs and earns XP. | Long-term forestry, sapling supply and biome variation. |
-| A4 Unreachable trees | A tree enclosed by walls causes structured `PATH_UNREACHABLE`, parent-plan diagnostics, spaced retries and escalation to `BLOCKED`. | Viewing that live failure through the graphical Ledger. |
-| A5 Missing materials | A builder with no materials places no block and reports the shortage; resource claims protect another plan's actual items. | Full survival-session shortage balancing. |
-| A6 Dependency chain | Domain tests validate missing/cyclic references; plan inspection and Ledger use the same tree. Autonomous construction requires a material-production plan. | The complete multi-stage debug scenario observed through the client UI. |
-| A7 Recovery | Opening the enclosed tree's access resumes gathering and delivery without changing saved plan data; successful progress clears the blocker. | Recovery from multiple simultaneous shortages in a survival village. |
-| A8 Site rejection | Actual supported flat terrain is accepted, water and an existing chest are rejected; pure rules cover slopes, unsupported ground and scoring. Autonomous planner selects a buildable site. | More irregular terrain and inaccessible-entrance layouts. |
-| A9 Progressive building | A moving builder places an entire real house over time, consumes its exact manifest, registers it and emits completion history. A separate autonomous planner scenario assigns work and builds a house. | Visually observing the other five templates in a client. |
-| A10 Player obstruction | An obstructing diamond block remains untouched; construction reports obstruction without spending material. Construction also revalidates the completed prefix. | Repeated edits to entrances and partially built roofs. |
-| A11 Storage removal | Destroyed storage disappears from stock and references; full-container transfers conserve every item and retain untransferred cargo. | Multiple storage removals while several workers carry cargo. |
-| A12 Mid-plan reload | A house build serializes and restores SavedData after at least 20 placements, then resumes to completion with exactly one registered building. A 1,000-entry chronicle passes real compressed NBT round-trip. | Full process restart, chunk-file/entity-file integration and unload/reload soak. |
-| A13 Worker death | Killing an assigned worker marks death, clears ownership, diagnoses worker loss, removes dropped cargo from inventory and writes history. | Replacement assignment in a longer multiplayer session. |
-| A14 Progression | XP boundaries I–V are deterministic and persist; real forestry/farming/mining/building gain XP only through successful actions. | Watching repeated level-ups in a long client session. |
-| A15 Mining | A miner uses an actual wooden pickaxe, breaks real stone, delivers precisely one cobblestone and spends durability. Unit tests cover coal/copper/iron/high-tier gates and diamond exclusion. | Real-world ore fixtures at every tier and larger exposed mining sites. |
-| A16 Farming | Mature wheat is physically harvested, replanted using real seeds and delivered; farmer XP increases. | All supported crop types under changing player field layouts. |
-| A17 Animals | Real animals in a bounded pen consume two food items and enter vanilla breeding. At the configured cap, no food is consumed. | Full offspring lifecycle, pen expansion and long-term balancing. |
-| A18 Smith | A wooden pickaxe uses an actual crafting-table recipe and exact ingredients; a real furnace consumes raw iron/fuel and produces iron. | A worn-out tool's entire replacement chain in a client village. |
-| A19 Ledger | Server snapshot round-trip preserves IDs and blocker details; six player tabs and permission-controlled Diagnostics are verified. Dedicated-server load verifies common code does not load client screen classes. | Actual book/bell interaction, graphical navigation, resizing and multiplayer refresh. |
-| A20 Build | Unit tests, full build and dedicated-server GameTests are executed through the Gradle wrapper. | See final run totals below. |
+| Graphical Ledger, real interaction and multiplayer UX | MANUAL_REQUIRED | M1 |
+| Ordinary generated-world restart/unload/reload | MANUAL_REQUIRED | M2 |
+| Two-hour normal-speed survival session with multiple villages | MANUAL_REQUIRED | M3 |
 
-## Fixture boundaries
-
-GameTests create controlled terrain, villagers and material supplies as test
-setup. Production gameplay contains no corresponding free-resource command.
-The autonomous house test starts with physical logs and other supplies in a
-chest, but no building planks: the planner must craft them. It does not prove a
-complete self-sufficient economy starting in every naturally generated biome.
-
-The full house executor test resumes a serialized simulation midway while the
-GameTest server remains running. The separate entity test restores actual
-vanilla inventory NBT. These are useful persistence checks, but do not establish
-atomic saves across independent Minecraft files or replace process-restart tests.
-
-The site/autonomy tests use open sky. Minecraft's default GameTest enclosure has
-an invisible roof that affects surface heightmaps; leaving that roof in these
-fixtures would test the enclosure instead of the intended terrain.
-
-## Manual release gate
-
-Before promoting this development artifact to a fully accepted v1.0:
-
-1. Run the A1–A19 playthrough in a naturally generated plains village, including
-   the full blocked housing → blocked forestry → restored access → completed
-   house chain and visible personal level-up.
-2. Save and stop the process during active construction and carrying. Restart,
-   compare IDs/materials/progress, then unload/reload the settlement repeatedly.
-3. Inspect all Ledger tabs using a regular player and an operator; test refresh,
-   screen resizing and a dedicated client/server connection.
-4. Observe multiple villages and several in-game days; record tick/save costs,
-   stalled plans, food/tool balance and unintended interference with buildings.
-
-No graphical screenshots or manual-session results are claimed by this report.
-
-## Final automated run
-
-`test build runGameTestServer` completed with **BUILD SUCCESSFUL**:
-**10 JUnit tests**, zero skipped/failures/errors, and **23 required GameTests
-passed**. The final run includes autonomous production of the missing house
-planks and full construction.
-
-The development artifact remains labelled `1.0.0-dev` until the manual gate
-above is completed.
+History and completed plans remain permanent records, with memory/disk usage
+proportional to meaningful activity. They are excluded from frequent queues;
+this pass adds no archival subsystem and deletes no history. Multi-year
+archives, arbitrary-biome bootstrap, claim-mod integration and larger settlement
+profiling remain known limits. No **1.0.0 stable** claim is made.

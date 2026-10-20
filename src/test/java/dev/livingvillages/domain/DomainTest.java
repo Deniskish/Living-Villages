@@ -4,6 +4,32 @@ import java.util.*;
 import static dev.livingvillages.domain.Model.*;
 import static org.junit.jupiter.api.Assertions.*;
 class DomainTest {
+    @Test void terminalOperationsAreAtomicAndCompletionIsIdempotent() {
+        Plan p=new Plan();p.complete(42);
+        String before=StateCodec.encode(worldWith(p));
+        assertThrows(IllegalStateException.class,()->p.progress(500));
+        assertThrows(IllegalStateException.class,()->p.block(Diagnostics.reason(Reason.UNKNOWN,"test",p,null,500,null,"",0,0),500,1));
+        p.complete(600);
+        assertEquals(before,StateCodec.encode(worldWith(p)));
+    }
+    private World worldWith(Plan p) {
+        World w=new World();Village v=new Village();v.id=new UUID(0,1);v.plans.put(p.id,p);w.villages.put(v.id,v);return w;
+    }
+    @Test void terminalPlanReloadCannotRetainLiveWorkerOrReservations() {
+        Plan p=new Plan();Task t=new Task();t.worker=UUID.randomUUID();p.tasks.add(t);
+        p.reservations.put("oak",10);p.complete(5);
+        Plan restored=StateCodec.decode(StateCodec.encode(worldWith(p))).villages.values().iterator().next().plans.get(p.id);
+        assertEquals(State.CANCELLED,restored.tasks.getFirst().state());
+        assertNull(restored.tasks.getFirst().worker);assertTrue(restored.reservations.isEmpty());
+    }
+    @Test void activeIndexExcludesLargeTerminalArchiveAndCompletedWork() {
+        Village v=new Village();
+        for(int i=0;i<10000;i++) { Plan p=new Plan();p.complete(i);v.plans.put(p.id,p); }
+        Plan active=new Plan();v.plans.put(active.id,active);
+        assertEquals(List.of(active),List.copyOf(v.activePlans()));
+        active.complete(12000);assertTrue(v.activePlans().isEmpty());
+        assertEquals(10001,v.plans.size(),"Archive is retained, not silently deleted");
+    }
     @Test void experienceBoundariesAndMiningGates() {
         assertEquals(1,Rules.level(63));assertEquals(2,Rules.level(64));
         assertEquals(3,Rules.level(256));assertEquals(4,Rules.level(768));assertEquals(5,Rules.level(2048));

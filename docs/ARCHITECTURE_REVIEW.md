@@ -80,3 +80,60 @@
   every biome are not established by a controlled construction test.
 - Client visuals and long survival sessions require manual acceptance. Automated
   dedicated-server success establishes server compatibility, not client UX polish.
+
+## v1.0 hardening review
+
+High-severity fixes:
+
+- **Unreadable save fallback.** Mapped DimensionDataStorage catches exceptions
+  from a SavedData deserializer and returns null. Throwing in our decoder alone
+  was insufficient: computeIfAbsent could install a blank simulation. Its
+  constructor now checks the dimension-specific existing file and refuses that
+  replacement. The original file is preserved; an operator must repair/restore
+  a corrupt save rather than silently lose history.
+- **Shared stock ownership.** Overlapping observation squares previously allowed
+  two villages to index the same chest. Ownership now uses boundary membership,
+  nearest center and a UUID tie-break; stock also deduplicates repeated positions.
+  Discovery, storage, harvesting, site selection and bell lookup use that rule.
+- **Terminal mutation.** Work.progress/block check terminal state before touching
+  timestamps, attempts or blockers. Complete is idempotent. Reload cancels live
+  orphan tasks below terminal plans, clears their reservations and repairs
+  duplicate citizen membership and assignment references.
+
+Medium-severity fixes:
+
+- Ledger JSON is bounded after escaping, rows and fields are bounded, and
+  dependency expansion has node/depth budgets. Personal history is gathered in
+  one bounded reverse scan. Completed plans are read in recent insertion order
+  rather than sorting the full archive for every snapshot.
+- Client refresh is distinguished from initial open: it updates an existing
+  matching screen but cannot reopen a closed one. Wrapping is cached, titles
+  clipped and tabs wrap at narrow widths. Actual visual usability is manual.
+- Active/latest-kind indexes remove historical plans from frequent work and
+  acquisition lookups. The domain remains append-only; these transient indexes
+  rebuild after load. Histories are preserved, not artificially truncated.
+- Unloaded/removed villages release terrain indexes; unloaded centers do not
+  run strategic scans. Scan cursor arithmetic is long-lived. Identical worker
+  reassignment after an unchanged blocker no longer emits another assignment
+  event. Existing retry delays remain bounded.
+- A reachable approach position could fall just outside the old container
+  arrival radius. The three-block check now includes legal approaches while
+  retaining visibility. Pen flood-fill validates adjacent chunk availability.
+- The server tick entry checks its thread; no asynchronous world mutation path
+  was introduced. Client screen classes remain distribution-restricted.
+
+Evidence and limits:
+
+- Two separate server JVMs preserved village/citizen/plan/building IDs, earned
+  XP/skills, history, dependency/blocker metadata and exact remaining materials;
+  a partially built second house completed once after loading real entity files.
+- The 48,000-tick soak runs 36 villagers across three villages, verifies real
+  unloading and isolation, and requires actual construction and forestry/farming.
+  It measures job-call cost and work budgets, not complete server MSPT or client
+  FPS. The fixture holds daylight fixed and supplies controlled materials.
+- Permanent history and plans still grow with actual activity and are serialized
+  as one document. This is retained world history rather than an orphan runtime
+  cache, but very long saves still need archival design/profiling. That existing
+  backlog is unchanged; no v1.1 gameplay was added.
+- M1–M3 in MANUAL_ACCEPTANCE.md remain the visual, ordinary generated-world and
+  longer survival gates. No manual pass or stable-release claim is made.

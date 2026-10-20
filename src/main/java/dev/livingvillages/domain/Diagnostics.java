@@ -19,18 +19,24 @@ public final class Diagnostics {
         }
         return Optional.empty();
     }
-    public static Node tree(Plan plan,Map<UUID,Plan> plans) { return tree(plan,plans,new HashSet<>()); }
-    private static Node tree(Plan plan,Map<UUID,Plan> plans,Set<UUID> visited) {
+    public static Node tree(Plan plan,Map<UUID,Plan> plans) { return tree(plan,plans,new HashSet<>(),new int[]{128}); }
+    private static Node tree(Plan plan,Map<UUID,Plan> plans,Set<UUID> visited,int[] budget) {
+        if(budget[0]--<=0||visited.size()>=16)return new Node(plan.id,plan.state(),
+                "Further dependencies omitted; inspect "+plan.id,plan.blocker,List.of());
         if(!visited.add(plan.id)) return new Node(plan.id,State.BLOCKED,"Dependency cycle",
                 reason(Reason.DEPENDENCY_BLOCKED,"Cyclic dependency",plan,null,0,null,"",0,0),List.of());
         List<Node> children=new ArrayList<>();
         for(UUID id:plan.dependencies) {
+            if(budget[0]<=0)break;
             Plan dependency=plans.get(id);
             if(dependency==null) children.add(new Node(id,State.BLOCKED,"Missing dependency",
                     reason(Reason.DEPENDENCY_BLOCKED,"Persisted dependency does not exist: "+id,plan,null,0,null,"",0,0),List.of()));
-            else children.add(tree(dependency,plans,new HashSet<>(visited)));
+            else children.add(tree(dependency,plans,new HashSet<>(visited),budget));
         }
-        for(Task task:plan.tasks) children.add(new Node(task.id,task.state(),task.role+" / "+task.phase,task.blocker,List.of()));
+        for(Task task:plan.tasks) {
+            if(budget[0]--<=0)break;
+            children.add(new Node(task.id,task.state(),task.role+" / "+task.phase,task.blocker,List.of()));
+        }
         return new Node(plan.id,plan.state(),plan.kind,plan.blocker,List.copyOf(children));
     }
     public static Blocker reason(Reason type,String message,Plan plan,Task task,long tick,Pos position,

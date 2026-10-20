@@ -68,18 +68,23 @@ public final class Model {
             state = next;
         }
         public void progress(long tick) {
+            if(state.terminal())throw new IllegalStateException("Terminal work "+id);
             lastProgressTick=tick; attempts=0; nextRetryTick=0; blocker=null;
             transition(State.IN_PROGRESS);
         }
         public void block(Blocker why, long tick, int retryLimit) {
-            blocker=why; attempts=Math.min(attempts+1,30);
+            if(state.terminal())throw new IllegalStateException("Terminal work "+id);
+            blocker=Objects.requireNonNull(why); attempts=Math.min(attempts+1,30);
             nextRetryTick=tick+Rules.backoff(attempts);
             transition(attempts >= retryLimit ? State.BLOCKED : State.WAITING);
         }
-        public void complete(long tick) { blocker=null; progress(tick); transition(State.COMPLETED); }
+        public void complete(long tick) {
+            if(state==State.COMPLETED)return;
+            progress(tick); transition(State.COMPLETED);
+        }
     }
     public static final class Task extends Work {
-        public UUID plan, worker;
+        public UUID plan, worker, lastAssignedWorker;
         public Role role;
         public String phase="SELECT", item="";
         public String desiredResource="";
@@ -115,16 +120,39 @@ public final class Model {
         public int radius=64;
         public long createdAt, lastPlanTick;
         public Map<UUID,Citizen> citizens = new LinkedHashMap<>();
-        public Map<UUID,Plan> plans = new LinkedHashMap<>();
+        public LinkedHashMap<UUID,Plan> plans = new LinkedHashMap<>();
         public Map<UUID,Building> buildings = new LinkedHashMap<>();
         public List<Pos> storage = new ArrayList<>();
         public List<Event> history = new ArrayList<>();
         public Map<Need,Double> needs = new EnumMap<>(Need.class);
         public List<Goal> goals = new ArrayList<>();
+        private transient Map<UUID,Plan> liveIndex=new LinkedHashMap<>();
+        private transient Map<String,Plan> latestKind=new HashMap<>();
+        private transient int indexedPlanCount=-1;
+        public transient long scanSteps,strategicSteps,workerSteps,workerNanos,maxWorkerNanos;
+        public Collection<Plan> activePlans() {
+            if(indexedPlanCount<0||indexedPlanCount>plans.size()) {
+                liveIndex=new LinkedHashMap<>();latestKind=new HashMap<>();
+                plans.forEach((id,p)->{
+                    if(!p.state().terminal())liveIndex.put(id,p);
+                    latestKind.put(p.kind,p);
+                });
+                indexedPlanCount=plans.size();
+            } else if(indexedPlanCount<plans.size()) {
+                // Production plans are append-only. Historical plans never re-enter the hot queue.
+                List<Plan> added=new ArrayList<>(plans.reversed().values().stream().limit(plans.size()-indexedPlanCount).toList());
+                Collections.reverse(added);
+                for(Plan p:added) { if(!p.state().terminal())liveIndex.put(p.id,p);latestKind.put(p.kind,p); }
+                indexedPlanCount=plans.size();
+            }
+            liveIndex.values().removeIf(p->p.state().terminal());
+            return List.copyOf(liveIndex.values());
+        }
+        public Optional<Plan> latestPlan(String kind) { activePlans();return Optional.ofNullable(latestKind.get(kind)); }
         public int beds;
         public boolean contains(Pos p) { return center.distanceSquared(p) <= (long)radius*radius; }
         public Optional<Plan> active(String kind) {
-            return plans.values().stream().filter(p->p.kind.equals(kind)&&!p.state().terminal()).findFirst();
+            return activePlans().stream().filter(p->p.kind.equals(kind)).findFirst();
         }
         public long population() { return citizens.values().stream().filter(c->!c.dead).count(); }
     }

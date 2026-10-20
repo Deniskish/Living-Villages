@@ -10,6 +10,12 @@ executor and the autonomous planner. A manual client playthrough and extended
 survival-world soak test remain release acceptance work; this is not a claim that
 every biome, terrain shape or mod combination has been validated.
 
+The v1.0 hardening pass additionally exercises a two-process restart with real
+world/entity files and a 48,000-tick simulation of three villages / 36 villagers,
+including chunk unload/reload. These are controlled automated fixtures. Follow
+the [manual acceptance protocol](docs/MANUAL_ACCEPTANCE.md) before treating this
+as a stable release.
+
 ## Requirements and installation
 
 - Minecraft **1.21.1**
@@ -43,6 +49,8 @@ missing materials in a village chest; this uses the same physical economy.
 
 **Chests and barrels inside the working boundary are village-accessible.** Keep
 personal supplies outside that boundary if villagers should not consume them.
+Where working boundaries overlap, a position belongs to the nearest registered
+village center, with a stable UUID tie-break; the same chest is not shared stock.
 The village can bootstrap a chest, crafting table and furnace using acquired
 materials. Citizens can hand materials to another citizen at close range when
 storage is unavailable.
@@ -114,6 +122,12 @@ The view currently shows up to 200 citizens/recent chronicle entries, 150 plans
 and 200 buildings. The complete history remains saved. Screenshots/GIFs have not
 yet been captured.
 
+Snapshots bound long fields and may shorten lists to fit the network budget;
+the Overview tab reports such shortening. Personal events use the most recent
+4,096 village events. Full records remain saved and a specific plan can be
+inspected by UUID. Refresh preserves the selected tab and cannot reopen an
+already closed Ledger. Both client and server must use the same build.
+
 Commands:
 
 ```text
@@ -159,8 +173,19 @@ the separate ignored `run-gametest` directory. `scripts/MakeTestTemplate.java`
 reproducibly generates the empty NBT test structure.
 
 See [acceptance results](docs/ACCEPTANCE_RESULTS.md) for actual automated coverage
-and manual checks still outstanding. The final 2026-10-20 run passed **10 JUnit
-tests**, **23 GameTests**, and the full Gradle build.
+and manual checks still outstanding. The hardening suite contains **13 JUnit
+tests** and **28 GameTests**, including the multi-village soak. A separate
+two-process restart test is run with:
+
+```powershell
+.\scripts\acceptance-restart.ps1
+```
+
+It retains its world and both process logs in a unique ignored
+`run-restart-<timestamp>` directory. It uses actual SavedData, region and entity
+files, verifies cargo against the remaining building manifest, and resumes the
+same construction. Test-only world setup and chunk tickets are confined to
+GameTests and are disabled in production.
 
 ## Current limits
 
@@ -180,12 +205,13 @@ tests**, **23 GameTests**, and the full Gradle build.
   validation. Arbitrary modded recipes and protection/claim-mod hooks have not
   been integrated. Furnaces currently handle the iron production chain.
 - Chronicle/plan storage is retained in one SavedData document per dimension.
-  Multi-year archives, client pagination of older history and large-settlement
-  profiling are follow-up work.
+  Active work uses separate runtime indexes; completed records remain permanent
+  and grow with meaningful activity. Multi-year archival storage, older-history
+  pagination and larger-settlement profiling remain follow-up work.
 - A graphical Ledger playthrough, full process restart with a real survival
   world, repeated chunk unload/reload and long-running balance tests still need
-  manual validation. Automated NBT/vanilla cargo round trips and mid-build resume
-  are covered; they are not a substitute for those manual sessions.
+  manual validation. Automated two-JVM restart, NBT/cargo checks and an actual
+  unload/reload soak are covered; they do not replace those manual sessions.
 
 ## Roadmap
 

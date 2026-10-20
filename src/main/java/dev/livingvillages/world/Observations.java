@@ -13,17 +13,18 @@ import static dev.livingvillages.world.Positions.*;
 public final class Observations {
     public final Set<Pos> logs=new LinkedHashSet<>(), crops=new LinkedHashSet<>(), stone=new LinkedHashSet<>(),
             beds=new LinkedHashSet<>(), tables=new LinkedHashSet<>(), paths=new LinkedHashSet<>(), furnaces=new LinkedHashSet<>();
-    private int cursor;
+    private long cursor;
+    public long scannedBlocks() { return cursor; }
     public boolean ready(Village v) { int width=v.radius*2+1;return cursor>=width*width*3; }
     public void scan(ServerLevel level,Village v) {
         int r=v.radius, width=2*r+1, height=17, total=width*width*height;
         for(int n=0;n<VillageConfig.SCAN_BUDGET.get();n++) {
-            int i=cursor++%total;
+            int i=(int)(cursor++%total);
             int layer=i/(width*width),dy=layer==0?0:(layer%2==1?(layer+1)/2:-layer/2);
             Pos p=v.center.offset(i%width-r,dy,(i/width)%width-r);
             BlockPos b=block(p);
             if(!level.hasChunkAt(b))continue;
-            var state=level.getBlockState(b);
+            var state=Ownership.owns(level,v,p)?level.getBlockState(b):Blocks.AIR.defaultBlockState();
             update(logs,p,state.is(BlockTags.LOGS));
             update(crops,p,state.getBlock() instanceof CropBlock);
             update(stone,p,state.is(Blocks.STONE)||state.is(BlockTags.COAL_ORES)||state.is(BlockTags.COPPER_ORES)

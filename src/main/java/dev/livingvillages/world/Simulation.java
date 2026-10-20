@@ -23,23 +23,30 @@ public final class Simulation {
     private long workerCursor;
     public void clear() { observations.clear();blueprints=null;planner=null;construction=null; }
     public void tick(ServerLevel level) {
+        if(!level.getServer().isSameThread())throw new IllegalStateException("Village simulation must run on the server thread");
         if(level.getGameTime()%10!=0)return;
         if(blueprints==null) { blueprints=new Blueprints();planner=new VillagePlanner(chronicle,blueprints);construction=new ConstructionJob(blueprints); }
         VillageSavedData data=VillageSavedData.get(level);
         if(level.getGameTime()%200==0)discovery.discover(level,data.world);
         var indexes=observations.computeIfAbsent(level,k->new HashMap<>());
+        indexes.keySet().removeIf(id->!data.world.villages.containsKey(id));
         List<Runnable> work=new ArrayList<>();
         for(Village v:data.world.villages.values()) {
-            Observations observed=indexes.computeIfAbsent(v.id,k->{
+            boolean centerLoaded=level.hasChunkAt(Positions.block(v.center));
+            if(!centerLoaded)indexes.remove(v.id);
+            Observations observed=centerLoaded?indexes.computeIfAbsent(v.id,k->{
                 Observations result=new Observations();
                 level.getPoiManager().getInRange(t->t.is(net.minecraft.world.entity.ai.village.poi.PoiTypes.HOME),
                         Positions.block(v.center),v.radius,net.minecraft.world.entity.ai.village.poi.PoiManager.Occupancy.ANY)
-                        .filter(p->level.hasChunkAt(p.getPos())).forEach(p->result.beds.add(Positions.of(p.getPos())));
+                        .filter(p->level.hasChunkAt(p.getPos())&&Ownership.owns(level,v,Positions.of(p.getPos())))
+                        .forEach(p->result.beds.add(Positions.of(p.getPos())));
                 return result;
-            });
-            if(level.hasChunkAt(Positions.block(v.center)))observed.scan(level,v);
-            if(observed.ready(v)&&level.getGameTime()-v.lastPlanTick>=VillageConfig.PLANNER_INTERVAL.get())planner.tick(level,v,observed);
-            var plans=v.plans.values().stream().filter(p->!p.state().terminal())
+            }):new Observations();
+            if(centerLoaded) { observed.scan(level,v);v.scanSteps++; }
+            if(centerLoaded&&observed.ready(v)&&level.getGameTime()-v.lastPlanTick>=VillageConfig.PLANNER_INTERVAL.get()) {
+                planner.tick(level,v,observed);v.strategicSteps++;
+            }
+            var plans=v.activePlans().stream()
                     .sorted(Comparator.comparingDouble((Plan p)->p.priority).reversed()).toList();
             for(Plan p:plans)for(Task task:p.tasks)
                 if(!task.state().terminal()&&level.getGameTime()>=task.nextRetryTick)work.add(()->execute(level,v,p,task,observed));
@@ -87,7 +94,10 @@ public final class Simulation {
                 citizen.role=task.role;chronicle.emit(v,now,"ROLE_ASSIGNED",citizen.id,task.id,citizen.role.toString());
             }
             task.worker=citizen.id;citizen.currentTask=task.id;task.attemptStartedAt=now;task.transition(State.ASSIGNED);
-            chronicle.emit(v,now,"TASK_ASSIGNED",citizen.id,task.id,p.kind);
+            if(!citizen.id.equals(task.lastAssignedWorker)) {
+                chronicle.emit(v,now,"TASK_ASSIGNED",citizen.id,task.id,p.kind);
+                task.lastAssignedWorker=citizen.id;
+            }
         }
         if(!(level.getEntity(citizen.id) instanceof Villager worker)) {
             task.block(Diagnostics.reason(Reason.CHUNK_UNAVAILABLE,"Citizen is unloaded; assignment retained",p,task,now,null,"",0,0),now,VillageConfig.RETRY_LIMIT.get());
@@ -108,11 +118,15 @@ public final class Simulation {
         Job job=p.blueprint!=null?construction:p.kind.startsWith("CRAFT:")?production:p.kind.startsWith("PLACE:")?utility:
                 p.kind.equals("SMELT_IRON")?smelting:p.kind.equals("FEED_CITIZENS")?population:
                 p.kind.equals("SHEAR")?wool:p.kind.startsWith("ROAD:")?road:task.role==Role.ANIMAL_KEEPER?animals:harvest;
+        long started=System.nanoTime();v.workerSteps++;
         try { job.tick(context); }
         catch(RuntimeException error) {
             dev.livingvillages.LivingVillagesMod.LOG.error("event=unrecoverable_ai_error village={} plan={} task={}",v.id,p.id,task.id,error);
             context.block(Reason.UNKNOWN,"Executor failed: "+error.getClass().getSimpleName()+"; inspect server log");
             task.transition(State.FAILED);p.transition(State.FAILED);p.reservations.clear();
+        }
+        finally {
+            long elapsed=System.nanoTime()-started;v.workerNanos+=elapsed;v.maxWorkerNanos=Math.max(v.maxWorkerNanos,elapsed);
         }
     }
     private static void citizenHome(Village v,UUID citizen,Pos home) { v.citizens.get(citizen).home=home; }

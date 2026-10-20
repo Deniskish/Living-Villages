@@ -17,6 +17,18 @@ neoForge {
             gameDirectory = project.file('run-gametest')
             systemProperty 'neoforge.enabledGameTestNamespaces', 'livingvillages'
         }
+        restartWrite {
+            type = 'gameTestServer'
+            gameDirectory = project.file(providers.gradleProperty('acceptanceDir').getOrElse('run-restart'))
+            systemProperty 'neoforge.enabledGameTestNamespaces', 'livingvillages_restart'
+            systemProperty 'livingvillages.acceptance.phase', 'write'
+        }
+        restartRead {
+            type = 'gameTestServer'
+            gameDirectory = project.file(providers.gradleProperty('acceptanceDir').getOrElse('run-restart'))
+            systemProperty 'neoforge.enabledGameTestNamespaces', 'livingvillages_restart'
+            systemProperty 'livingvillages.acceptance.phase', 'read'
+        }
     }
     mods { livingvillages { sourceSet sourceSets.main } }
 }

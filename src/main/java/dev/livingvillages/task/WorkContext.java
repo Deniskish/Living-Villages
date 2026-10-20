@@ -43,7 +43,7 @@ public record WorkContext(ServerLevel level,Village village,Plan plan,Task task,
         block(Reason.CHUNK_UNAVAILABLE,"Required chunk is unloaded",p,"",0,0);return false;
     }
     public boolean near(Pos p) {
-        return worker.position().distanceToSqr(Vec3.atCenterOf(Positions.block(p)))<=6.25;
+        return worker.position().distanceToSqr(Vec3.atCenterOf(Positions.block(p)))<=9;
     }
     public boolean move(Pos p) {
         if(!loaded(p))return false;
@@ -83,7 +83,7 @@ public record WorkContext(ServerLevel level,Village village,Plan plan,Task task,
         int physical=Inventories.stock(level,village).getOrDefault(item,0);
         for(Citizen c:village.citizens.values())if(!c.dead&&level.getEntity(c.id) instanceof Villager entity)
             physical+=Inventories.count(entity.getInventory(),item);
-        int claimed=village.plans.values().stream().filter(p->p!=plan&&!p.state().terminal())
+        int claimed=village.activePlans().stream().filter(p->p!=plan)
                 .mapToInt(p->p.reservations.getOrDefault(item,0)).sum();
         int free=Math.max(0,physical-carried-claimed);
         if(free<amount-carried) {
@@ -91,6 +91,7 @@ public record WorkContext(ServerLevel level,Village village,Plan plan,Task task,
                     task.target,item,amount,carried+free);return false;
         }
         Pos source=village.storage.stream().filter(p-> {
+            if(!dev.livingvillages.world.Ownership.owns(level,village,p))return false;
             var inv=Inventories.container(level,p);
             return inv!=null&&Inventories.count(inv,item)>0;
         }).min(Comparator.comparingDouble(p->worker.distanceToSqr(p.x(),p.y(),p.z()))).orElse(null);
@@ -116,6 +117,7 @@ public record WorkContext(ServerLevel level,Village village,Plan plan,Task task,
     public boolean deliver() {
         if(worker.getInventory().isEmpty())return true;
         Pos destination=village.storage.stream().filter(p-> {
+                    if(!dev.livingvillages.world.Ownership.owns(level,village,p))return false;
                     var container=Inventories.container(level,p);
                     return container!=null&&Inventories.canAccept(container,worker.getInventory());
                 })
