@@ -1,3 +1,29 @@
+# Acceptance results
+
+## v1.1 progression milestone — 2026-10-21 (1.1.0-dev)
+
+Full matrix: [V1_1_ACCEPTANCE.md](V1_1_ACCEPTANCE.md).
+
+- `gradlew clean test runGameTestServer build`: **BUILD SUCCESSFUL**, **36 JUnit
+  tests** (0 failures/errors/skipped), **all 40 required GameTests passed**
+  (28 v1.0 + 12 v1.1). JAR SHA-256
+  `60fb12a2de0c74d60e6ff6519bb4605cdb8aec8d93ed9b8960238b722b9c5abf`.
+- `scripts/acceptance-restart.sh`: both JVM phases passed
+  (`run-restart-20261021-140332`). The checkpoint now also holds a spruce house
+  at 20 placed blocks and a Charcoal Burning research plan at unit 2 whose smith
+  carries exactly the cost; after the restart both complete, the technology is
+  unlocked once and only the 4 deliberately extra logs remain.
+- Soak (48,000 ticks, 3 villages, 36 villagers) mean work call 82–90 µs, max
+  2.8–3.7 ms, vs 83–91 µs mean at the v1.0 baseline on this machine; every
+  village evaluated progression and recorded real wood production.
+- The v1.0 acceptance statuses A1–A20 below are unchanged by v1.1 (their tests
+  still pass). The responsive Ledger fix is **MANUAL_REQUIRED** (M4) — geometry is
+  unit-tested, the client has not been viewed by a person.
+- Fixture issues found and fixed while stabilising the suite (no production
+  change): persisted-world plot reuse (drop order, stale registered village),
+  entity-ticking wait for freshly forced chunks, scheduler-like retries in the
+  restart loop. See ARCHITECTURE_REVIEW.md, v1.1 review.
+
 # v1.0 acceptance and hardening — 2026-10-20
 
 Artifact remains **1.0.0-dev**, Minecraft 1.21.1 / NeoForge 21.1.262 / Java 21.

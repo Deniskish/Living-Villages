@@ -192,3 +192,33 @@ Dependency-ordered work:
    bounds; v1.0 suite retained.
 9. **Verification**: `test`, `runGameTestServer`, `build`, two-JVM restart;
    architecture review; documentation; version `1.1.0-dev`.
+
+### v1.1 progress and results
+
+- [x] Baseline recorded (`75f9806`; 13 JUnit, 28 GameTests on this machine).
+- [x] Ledger layout model, rendering order fix, routing; layout unit tests.
+- [x] Schema v2 + explicit migration + migration tests.
+- [x] Pure tier/capability/technology/palette domain + unit tests.
+- [x] Physical production record (drops, furnace, crafting, wool).
+- [x] Palette-aware blueprints/recipes/acquisition; `house_t2_01`.
+- [x] Planner integration: evaluation, capability gates, research plans, charcoal,
+      advanced mining band, diamond plan; `ResearchJob`.
+- [x] Progression Ledger tab, read-only command, shared diagnostics.
+- [x] 12 GameTests; two-JVM restart extended to research + spruce house.
+- [x] `test`, `runGameTestServer`, `build`, restart: all passing (see
+      `ACCEPTANCE_RESULTS.md`); version `1.1.0-dev`.
+- [ ] Manual M4 (graphical Ledger) and M1–M3 — not performed; MANUAL_REQUIRED.
+
+Decisions recorded during implementation:
+
+- Tier thresholds were set from the v1.0 economy (XP rates, beds per house,
+  Miner III for iron) instead of the brief's example numbers where needed; the
+  final table is `V1_1_SPEC.md` §1.2. Tier II uses 16 wood/16 food harvested.
+- Capabilities, not tier numbers, gate behaviour; all v1.0 behaviour is Tier I
+  except iron-tool crafting (now Tier II + intact smithy, still Smith III).
+- Research consumes the full cost in the unlock tick (no partial consumption), so
+  interruption cannot lose or duplicate the cost or unlock for free.
+- Production is recorded from NeoForge `BlockDropsEvent` final drops rather than
+  re-implementing vanilla's private drop capture.
+- The biome is only a palette tie-break, to avoid choosing a wood with no trees.
+- v1.0 production cannot be reconstructed; migrated villages re-earn tiers.

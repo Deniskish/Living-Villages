@@ -260,6 +260,43 @@ public final class ProgressionGameTests {
         });
     }
 
+    /** 6b. Researcher dies mid-work: cost drops as real items, plan blocks with a reason, nothing unlocks. */
+    @GameTest(template="empty",timeoutTicks=4000)
+    public static void researcherDeathBlocksWithoutFreeUnlock(GameTestHelper h) {
+        Research r=research(h,20,8);
+        var data=VillageSavedData.get(h.getLevel());
+        // Registered so the production death handler sees the citizen; the planner stays frozen and the
+        // fixture alone drives the job (nextRetryTick parks the task for the scheduler).
+        r.village.plans.values().removeIf(p->p!=r.plan); // The scheduler must not give the smith other work.
+        r.village.lastPlanTick=Long.MAX_VALUE;data.world.villages.put(r.village.id,r.village);
+        h.runAtTickTime(3999,()->{data.world.villages.remove(r.village.id);data.setDirty();});
+        var c=assign(h,r);boolean[] killed={false};
+        h.onEachTick(()->{
+            if(h.getTick()%10!=0||killed[0])return;
+            c.task().nextRetryTick=0;
+            new ResearchJob().tick(c);
+            c.task().nextRetryTick=Long.MAX_VALUE;
+            if(c.task().progress<2)return;
+            h.assertTrue(physical(c).equals(Map.of("minecraft:cobblestone",8,"minecraft:oak_log",20)),"Cost carried before death: "+physical(c));
+            c.task().worker=r.smith.id;r.smith.currentTask=c.task().id;
+            c.worker().hurt(c.worker().damageSources().genericKill(),1000);
+            killed[0]=true;
+        });
+        h.succeedWhen(()->{
+            h.assertTrue(killed[0]&&r.smith.dead,"Researcher died");
+            h.assertTrue(c.task().worker==null&&c.task().blocker!=null&&(c.task().blocker.type()==Reason.WORKER_UNAVAILABLE
+                    ||c.task().blocker.type()==Reason.NO_QUALIFIED_WORKER),"Task released and explained: "+c.task().blocker);
+            h.assertTrue(r.plan.state()==State.BLOCKED&&r.plan.blocker!=null,"Plan blocked with a reason");
+            h.assertTrue(r.plan.tasks.getFirst().progress>=2,"Completed work units are kept");
+            h.assertTrue(r.village.technologies.isEmpty()&&unlocks(r.village).isEmpty(),"No unlock without the consumed cost");
+            int dropped=h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                    new net.minecraft.world.phys.AABB(h.absolutePos(new BlockPos(8,1,8))).inflate(16),e->e.getItem().is(Items.OAK_LOG))
+                    .stream().mapToInt(e->e.getItem().getCount()).sum();
+            h.assertTrue(dropped==16&&Inventories.count(r.chest(),"minecraft:oak_log")==4,"Carried cost dropped as real items, not destroyed or duplicated: dropped="+dropped);
+            data.world.villages.remove(r.village.id);data.setDirty();
+        });
+    }
+
     // ---------------------------------------------------------------- palettes
 
     /** 7. A spruce house keeps its palette through save/load, completes in spruce and inspects intact. */

@@ -75,7 +75,7 @@ public final class RestartGameTests {
             smithEntity.setPos(BASE.getX()+5.5,BASE.getY()+1,BASE.getZ()+4.5);smithEntity.setPersistenceRequired();level.addFreshEntity(smithEntity);
             var player=h.makeMockServerPlayerInLevel();player.teleportTo(bell.getX(),bell.getY(),bell.getZ());
             WorkContext[] current={null},researching={null};boolean[] second={false},saved={false},paused={false};
-            long discoverAt=h.getTick()+10;
+            long discoverAt=h.getTick()+10;long[] buildRetry={0},studyRetry={0};
             Runnable discover=()->{
                 new Discovery(new Chronicle()).discover(level,data.world);
                 Village v=data.world.villages.values().stream().filter(candidate->candidate.citizens.containsKey(worker.getUUID())).findFirst().orElseThrow();
@@ -97,16 +97,15 @@ public final class RestartGameTests {
                     if(current[0]==null&&h.getTick()>=discoverAt)discover.run();
                     if(current[0]==null||saved[0]||h.getTick()%10!=0)return;
                     Village v=current[0].village();Citizen citizen=current[0].citizen();
-                    job.tick(current[0]);
-                    current[0].task().nextRetryTick=Long.MAX_VALUE; // Only this fixture drives this executor.
+                    drive(job,current[0],buildRetry);
                     if(!paused[0]) {
-                        research.tick(researching[0]);researching[0].task().nextRetryTick=Long.MAX_VALUE;
+                        drive(research,researching[0],studyRetry);
                         paused[0]=researching[0].task().progress>=2; // Keep research mid-way for the checkpoint.
                     }
                     if(current[0].plan().state()==State.COMPLETED&&!second[0]) {
                         UUID completed=current[0].plan().id;
                         current[0]=construction(level,v,citizen,worker,of(BASE.offset(16,1,6)),SECOND_PALETTE);
-                        current[0].plan().dependencies.add(completed);second[0]=true;
+                        current[0].plan().dependencies.add(completed);second[0]=true;buildRetry[0]=0;
                     }
                     if(second[0]&&paused[0]&&current[0].task().progress>=20) {
                         Plan blocked=new Plan();blocked.kind="GATHER_WOOD";blocked.village=v.id;
@@ -160,7 +159,7 @@ public final class RestartGameTests {
             var smith=restored.citizens.values().stream().filter(c->c.role==Role.SMITH).findFirst().orElseThrow();
             h.assertTrue(smith.experience.get(Role.SMITH)>=64,"Researcher identity and XP preserved");
             Observations observed=new Observations();observed.furnaces.add(furnace);
-            boolean[] resumed={false};WorkContext[] studying={null};
+            boolean[] resumed={false};WorkContext[] studying={null};long[] buildRetry={0},studyRetry={0};
             h.onEachTick(()->{
                 if(h.getTick()%10!=0)return;
                 // Actual entity storage loads asynchronously.
@@ -177,8 +176,10 @@ public final class RestartGameTests {
                     resumed[0]=true;
                 }
                 WorkContext c=new WorkContext(level,restored,active,active.tasks.getFirst(),citizen,worker,new Observations(),new Chronicle());
-                if(active.state()!=State.COMPLETED) { job.tick(c);c.task().nextRetryTick=Long.MAX_VALUE; }
-                if(study.state()!=State.COMPLETED) { research.tick(studying[0]);studying[0].task().nextRetryTick=Long.MAX_VALUE; }
+                if(h.getTick()>=29000)h.fail("Resume stalled: house "+active.state()+" "+active.progress+" "+active.blocker
+                        +" | research "+study.state()+" "+study.tasks.getFirst().progress+" "+study.blocker);
+                if(active.state()!=State.COMPLETED)drive(job,c,buildRetry);
+                if(study.state()!=State.COMPLETED)drive(research,studying[0],studyRetry);
                 if(active.state()==State.COMPLETED&&study.state()==State.COMPLETED) {
                     h.assertTrue(restored.buildings.size()==2,"Second house completes once after restart");
                     var building=restored.buildings.values().stream().filter(b->b.plan.equals(active.id)).findFirst().orElseThrow();
@@ -194,6 +195,20 @@ public final class RestartGameTests {
                 }
             });
         }
+    }
+    /**
+     * Drives one executor with the production scheduler's retry semantics: wait for the
+     * backoff after a blocker, then open a new attempt window. The task itself stays parked
+     * (nextRetryTick = MAX) so the live Simulation never runs it concurrently.
+     */
+    private static void drive(Job job,WorkContext c,long[] retryAt) {
+        long now=c.now();
+        if(now<retryAt[0])return;
+        if(retryAt[0]>0) { c.task().attemptStartedAt=now;retryAt[0]=0; }
+        c.task().nextRetryTick=0;
+        job.tick(c);
+        if(c.task().nextRetryTick>now)retryAt[0]=c.task().nextRetryTick;
+        c.task().nextRetryTick=Long.MAX_VALUE;
     }
     private static Map<String,Integer> cargo(Villager v) { Map<String,Integer> m=new TreeMap<>();Inventories.addStock(v.getInventory(),m);return m; }
     private static WorkContext construction(net.minecraft.server.level.ServerLevel level,Village v,Citizen citizen,Villager worker,Pos site,String palette) {

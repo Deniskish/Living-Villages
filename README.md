@@ -219,7 +219,7 @@ reproducibly generates the empty NBT test structure.
 
 See [acceptance results](docs/ACCEPTANCE_RESULTS.md) and
 [v1.1 acceptance](docs/V1_1_ACCEPTANCE.md) for actual automated coverage and
-manual checks still outstanding. The suite contains **36 JUnit tests** and **39
+manual checks still outstanding. The suite contains **36 JUnit tests** and **40
 GameTests**, including the multi-village soak and natural Tier II progression.
 A separate two-process restart test is run with:
 

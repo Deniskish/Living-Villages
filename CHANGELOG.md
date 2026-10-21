@@ -52,8 +52,10 @@ graphical Ledger acceptance (M4) has not been performed by a person.
 - `scripts/acceptance-restart.sh` for macOS/Linux. The two-JVM restart now also
   carries a mid-research technology plan and a spruce house across processes.
 - Restart fixture waits for its forced chunks to become entity-ticking before
-  spawning villagers (fresh worlds load entity storage asynchronously).
-- 23 new unit tests (36 total) and 11 new GameTests (39 total).
+  spawning villagers (fresh worlds load entity storage asynchronously) and drives
+  executors with the scheduler's retry semantics (a transient path failure right
+  after loading had stalled the resumed house).
+- 23 new unit tests (36 total) and 12 new GameTests (40 total).
 
 ## 1.0.0-dev — 2026-10-20
 
