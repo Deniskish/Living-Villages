@@ -4,7 +4,9 @@ A Java 21 / NeoForge mod that gives vanilla villagers persistent identities,
 autonomous work, resource-dependent plans, progressive construction and a village
 chronicle. Gameplay state belongs to the logical server, including single-player.
 
-**Current artifact: `1.0.0-dev`, a playable development build.** The automated
+**Current artifact: `1.1.0-dev`, a development milestone.** v1.1 adds village
+tiers I–V, a capability layer, physically researched technologies, wood palettes
+and a responsive Ledger ([v1.1 specification](docs/V1_1_SPEC.md)). The automated
 suite runs real workers and completes a house through both the construction
 executor and the autonomous planner. A manual client playthrough and extended
 survival-world soak test remain release acceptance work; this is not a claim that
@@ -21,8 +23,10 @@ as a stable release.
 - Minecraft **1.21.1**
 - NeoForge **21.1.262** or a compatible newer **21.1.x**
 - Java **21**
-- Install `build/libs/livingvillages-1.0.0-dev.jar` in `mods` on both client and
-  server. Do not install this artifact on other Minecraft minor versions.
+- Install `build/libs/livingvillages-1.1.0-dev.jar` in `mods` on both client and
+  server. Existing 1.0.0-dev worlds are migrated in place (schema 1 → 2); back up
+  valuable worlds first. A 1.1 world cannot be opened by 1.0 (it refuses the newer
+  save instead of overwriting it). Do not install this artifact on other Minecraft minor versions.
 
 The build pins ModDevGradle **2.0.148** and Gradle **9.2.1**, following the
 [official 1.21.1 MDK](https://github.com/NeoForgeMDKs/MDK-1.21.1-ModDevGradle).
@@ -42,9 +46,10 @@ Minecraft 1.21.1 is the selected supported target, not the newest Minecraft rele
    the target. A housing shortage creates a building plan. Existing spare beds
    may satisfy demand initially; growth also requires real food.
 
-Plains villages near small oak trees, exposed stone and farms are the most
-straightforward first test. Initial blueprints and production recipes use oak.
-An unsuitable environment can legitimately block development. You may supply
+Plains villages near small trees, exposed stone and farms are the most
+straightforward first test. Construction uses the local wood family (oak, spruce,
+birch, jungle, acacia, dark oak, mangrove or cherry) chosen from nearby trees and
+stock. An unsuitable environment can legitimately block development. You may supply
 missing materials in a village chest; this uses the same physical economy.
 
 **Chests and barrels inside the working boundary are village-accessible.** Keep
@@ -69,8 +74,36 @@ storage is unavailable.
 XP thresholds for levels I–V are **0, 64, 256, 768, 2048**. XP is stored per role
 when citizens change jobs. Skills and lifetime statistics are separate persistent
 records. Mining gates are I: stone/coal, II: copper, III: iron, IV:
-gold/redstone/lapis. Diamond mining remains gated for future village progression.
-Iron tool production requires Smith III. Missing qualifications are diagnosed.
+gold/redstone/lapis, V: diamond — diamond additionally needs the village
+DIAMOND_MINING capability and an iron pickaxe. Iron tool production requires
+Smith III, village Tier II and an intact smithy. Missing qualifications are diagnosed.
+
+## Village development (v1.1)
+
+Tiers **I Settlement, II Village, III Town, IV City, V Capital** are derived on
+the server from real facts: population, usable beds, completed buildings,
+storage, practised profession levels, a physical production record (harvested
+wood/food, mined stone, smelted iron), food reserve and technologies. No command
+or payment changes a tier. The highest tier reached is historical and is never
+lost to a temporary shortage, so tiers do not oscillate; each tier is recorded
+once in the chronicle. Activities still need their physical infrastructure: a
+former City without a smithy cannot make iron tools. Exact thresholds are in
+[V1_1_SPEC.md](docs/V1_1_SPEC.md).
+
+The planner asks **capabilities** (e.g. IRON_TOOLSMITHING, TECHNOLOGY_RESEARCH,
+ADVANCED_MINING, DIAMOND_MINING), not tier numbers. **Technologies** are
+researched by a qualified worker who carries the full material cost to a real
+furnace or crafting table, works there and consumes it in the same tick the
+unlock is recorded:
+
+| Branch | Technology | Effect |
+|---|---|---|
+| Economy | Charcoal Burning (Tier II, Smith II) | Logs → charcoal; iron smelting uses charcoal when no coal is stocked |
+| Infrastructure | Timber Framing (Tier III, Builder III) | Three-bed timber house `house_t2_01` |
+| Expansion | Deep Prospecting (Tier IV, Miner IV) | Diamond mining for Miner V with an iron pickaxe |
+
+Tier IV also extends the mining band deeper; Tier V grows the working boundary
+by 16 blocks.
 
 Villagers retain vanilla locomotion. A work activity temporarily suppresses
 competing daytime work; rest, trading and nearby hostile threats release control.
@@ -88,9 +121,11 @@ progress, attempts and retry times. A blocked task releases its worker and retai
 its diagnostic. Retries back off to at most one attempt per 6,000 ticks; resources
 and world state are rechecked before acting.
 
-Bundled templates:
+Bundled templates (all palette-aware; the chosen palette is persisted with the
+plan and the finished building):
 
 - `house_t1_01`, `house_t1_02`, `house_t1_03`
+- `house_t2_01` (requires ADVANCED_CONSTRUCTION)
 - `storage_t1`
 - `animal_pen_t1`
 - `smithy_t1`
@@ -110,8 +145,12 @@ string limit. Unknown save versions are rejected instead of overwritten.
 
 ## Ledger and diagnostics
 
-Tabs: **Overview, Citizens, Resources, Buildings, Plans, Chronicle**, plus
-**Diagnostics** for operators with permission level 2.
+Tabs: **Overview, Citizens, Resources, Buildings, Plans, Progression, Chronicle**,
+plus **Diagnostics** for operators with permission level 2. The layout is
+computed from the actual screen size: tabs wrap (or become a compact `< Tab >`
+selector on short windows), content is clipped to a scrollable viewport, and
+controls never overlap. Progression shows the tier, every requirement as
+`[✓]`/`[✗]`, capabilities and technologies per branch with text markers.
 
 Click a row for details, use the mouse wheel to scroll, **Back** to return and
 **Refresh** for a fresh server snapshot. Plans include a dependency tree and
@@ -135,9 +174,15 @@ Commands:
 /livingvillages village inspect
 /livingvillages citizen inspect <entity selector or UUID>
 /livingvillages plan inspect <plan UUID>
+/livingvillages progression inspect
 /livingvillages debug on
 /livingvillages debug off
+/livingvillages debug rename <name>
 ```
+
+`progression inspect` is read-only (why the village is not the next tier,
+capability and technology status). `debug rename` changes only the display name
+and is recorded in history.
 
 The debug toggle enables/disables an operator action-bar summary. Commands and
 Ledger share the same diagnostic tree. No command creates free resources or
@@ -172,13 +217,20 @@ JDK/cache files are ignored and are not required in source control. GameTests us
 the separate ignored `run-gametest` directory. `scripts/MakeTestTemplate.java`
 reproducibly generates the empty NBT test structure.
 
-See [acceptance results](docs/ACCEPTANCE_RESULTS.md) for actual automated coverage
-and manual checks still outstanding. The hardening suite contains **13 JUnit
-tests** and **28 GameTests**, including the multi-village soak. A separate
-two-process restart test is run with:
+See [acceptance results](docs/ACCEPTANCE_RESULTS.md) and
+[v1.1 acceptance](docs/V1_1_ACCEPTANCE.md) for actual automated coverage and
+manual checks still outstanding. The suite contains **36 JUnit tests** and **39
+GameTests**, including the multi-village soak and natural Tier II progression.
+A separate two-process restart test is run with:
 
 ```powershell
 .\scripts\acceptance-restart.ps1
+```
+
+or on macOS/Linux:
+
+```sh
+./scripts/acceptance-restart.sh
 ```
 
 It retains its world and both process logs in a unique ignored
@@ -198,8 +250,8 @@ GameTests and are disabled in production.
   Soil/leaves heuristics, natural foundation checks, collision checks, block
   entity exclusion and registered-building protection reduce interference but
   cannot perfectly distinguish player-built natural-looking terrain.
-- Templates are intentionally small and oak-based, with flat roofs and strict
-  flat-site requirements. No terrain carving, multilevel road routing, building
+- Templates are intentionally small, with flat roofs and strict flat-site
+  requirements; palettes change materials, not shapes. No terrain carving, multilevel road routing, building
   repair automation or animal herding is implemented.
 - Crafting supports the bundled production set, using live server recipes for
   validation. Arbitrary modded recipes and protection/claim-mod hooks have not
@@ -213,8 +265,15 @@ GameTests and are disabled in production.
   manual validation. Automated two-JVM restart, NBT/cargo checks and an actual
   unload/reload soak are covered; they do not replace those manual sessions.
 
+- Production before the v1.1 migration is not reconstructed; migrated villages
+  re-earn tiers from new work. Diamond ore is mined only when exposed and
+  reachable inside the indexed band, which is rare near villages.
+- The responsive Ledger is verified by geometry tests only; the graphical
+  procedure M4 is MANUAL_REQUIRED.
+
 ## Roadmap
 
+[v1.1 specification](docs/V1_1_SPEC.md) ·
 [Execution plan](docs/EXECUTION_PLAN.md) ·
 [Architecture review](docs/ARCHITECTURE_REVIEW.md) ·
 [v1.1 backlog](docs/V1_1_BACKLOG.md)

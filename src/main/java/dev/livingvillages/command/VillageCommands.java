@@ -68,6 +68,18 @@ public final class VillageCommands {
                             }return 0;
                         }))))
                 .then(Commands.literal("debug").requires(s->s.hasPermission(2))
+                        // Display name only (e.g. long-name Ledger acceptance); recorded in history, no gameplay effect.
+                        .then(Commands.literal("rename").then(Commands.argument("name",StringArgumentType.greedyString()).executes(ctx->{
+                            Village v=nearest(ctx.getSource());
+                            if(v==null) { ctx.getSource().sendFailure(Component.literal("No registered village contains this position"));return 0; }
+                            String name=StringArgumentType.getString(ctx,"name").strip();
+                            if(name.isEmpty()||name.length()>160) { ctx.getSource().sendFailure(Component.literal("Name must be 1-160 characters"));return 0; }
+                            String old=v.name;v.name=name;
+                            new dev.livingvillages.history.Chronicle().emit(v,ctx.getSource().getLevel().getGameTime(),"VILLAGE_RENAMED",null,v.id,
+                                    old+" renamed to "+name+" by operator",java.util.Map.of("previous",old,"name",name));
+                            VillageSavedData.get(ctx.getSource().getLevel()).setDirty();
+                            say(ctx.getSource(),"Renamed "+v.id+" to "+name);return 1;
+                        })))
                         .then(Commands.literal("on").executes(ctx->{ctx.getSource().getPlayerOrException().getPersistentData().putBoolean("livingvillages:debug",true);say(ctx.getSource(),"Living Villages debug enabled");return 1;}))
                         .then(Commands.literal("off").executes(ctx->{ctx.getSource().getPlayerOrException().getPersistentData().putBoolean("livingvillages:debug",false);say(ctx.getSource(),"Living Villages debug disabled");return 1;}))));
     }

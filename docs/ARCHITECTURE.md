@@ -556,3 +556,46 @@ does not require rewriting:
 - chronicle;
 - diagnostics;
 - UI transport layer.
+
+## 27. v1.1 implementation (progression milestone)
+
+The v1.1 code follows §23 ("VillageProgressionService, TechnologyService") without
+adding a parallel simulation. Details and balance values: `V1_1_SPEC.md`.
+
+```text
+Strategic tick (VillagePlanner, every plannerInterval, center loaded, index ready)
+ ├── stock + citizen cargo (existing)
+ ├── Palettes.select(indexed logs, stock, biome)      -> Village.palette (+scores)
+ ├── ProgressionService.evaluate                      -> VillageFacts
+ │     ├── ProgressionPolicy.qualifiedTier / advance  -> tier, tierHistory, event
+ │     └── ProgressionPolicy.evaluate                 -> VillageProgressionSnapshot
+ │           ├── CapabilityPolicy.all                 (tier + technology + infrastructure)
+ │           └── TechnologyPolicy.all                 (tier, prerequisites, profession, workstation)
+ ├── needs/goals (+ DEVELOPMENT)                      -> capability-gated ensure()
+ ├── RESEARCH:<id> plan, workstation/material dependencies
+ └── reservations (existing priority claims)
+Executors (WorkContext.capability / blockCapability)
+ ├── HarvestJob   ADVANCED_MINING depth, DIAMOND_MINING (dedicated plan only)
+ ├── ProductionJob IRON_TOOLSMITHING, palette recipes, produced()
+ ├── SmeltingJob  IRON_SMELTING / CHARCOAL_BURNING, produced()
+ └── ResearchJob  fetch cost -> workstation -> units -> consume + unlock (one tick)
+BlockDropsEvent (lowest priority) -> Simulation.drops -> production record
+```
+
+Boundaries:
+
+- `dev.livingvillages.progression` and `domain.Palettes` are Minecraft-free and
+  unit-tested; they operate on `VillageFacts` and domain records only.
+- `world.ProgressionService` / `world.Capabilities` adapt server state to facts.
+  The latest snapshot is a transient field on `Village` (rebuilt each strategic
+  tick, never persisted); Ledger/commands fall back to a read-only evaluation.
+- Persisted additions are plain fields on existing domain records, so the
+  single-document codec, IDs and recovery path are unchanged (schema 2 + migration).
+- Diagnostics reuse `Requirement` → `Diagnostics.Node`; no second blocker model.
+- Client geometry is `client.LedgerLayout` (pure); `LedgerScreen` only renders it.
+
+Extension points: add `TechnologyBranch` / `VillageCapability` constants and
+`Technologies` entries (e.g. MILITARY training grounds), add tier specs, or add
+a blueprint with a `capability` field. Government, military and diplomacy
+services can consume `VillageProgressionSnapshot` and capabilities without
+reading tier numbers.

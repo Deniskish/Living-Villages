@@ -6,7 +6,8 @@ coordinates, screenshots/logs and observed results.
 
 Use Minecraft 1.21.1, Java 21 and NeoForge 21.1.262 with this development JAR on
 client and server. Preserve a copy of the test world. Do not use a valuable
-existing world as the first acceptance fixture. No v1.1 feature is involved.
+existing world as the first acceptance fixture. M1–M3 were written for v1.0 and
+remain valid for 1.1.0-dev; M4 covers the v1.1 Ledger and Progression tab.
 
 ## M1 — Graphical Ledger and server authority
 
@@ -123,9 +124,60 @@ speed, with daylight/random crop growth conditions fixed by the harness. It
 does not establish normal-client frame rate, hostile-world balance or unlimited
 settlement scale.
 
+## M4 — v1.1 responsive Ledger and Progression tab
+
+Status: **MANUAL_REQUIRED**. The v1.0 report of overlapping Ledger controls at
+some resolutions/GUI scales is fixed in code (layout model, background order,
+viewport clipping) and covered by geometry unit tests, but it is **not** marked
+PASS_MANUAL until a person performs this procedure on a real client.
+
+Setup: `gradlew runClient` (Windows: `scripts\gradle.ps1 runClient`) with the
+`1.1.0-dev` JAR, an operator in a world with a registered village. Record OS,
+monitor resolution, window size, GUI Scale and screenshots for every step.
+
+1. **GUI Scale matrix.** Video Settings → GUI Scale **1, 2, 3, 4, Auto**. For each,
+   open the Ledger (Book + bell) at the default window size and in **fullscreen**
+   (F11). On every tab confirm: title, Refresh, every tab button, content rows,
+   status line, Back and Close are fully visible and **no two of them overlap**;
+   no text is drawn over a button; the blurred menu background never covers text.
+2. **Small window.** Resize the window to roughly 854×480, then to the smallest
+   size the OS allows. Tabs must wrap onto additional rows; when wrapping would
+   leave less than three rows of content the compact `[<] Tab (n/N) [>]` selector
+   must appear instead. Below 160×110 GUI pixels only "Window too small" and
+   Close are shown; Close works.
+3. **Live resize.** With a plan's details open, drag the window larger/smaller
+   several times. Layout recomputes immediately, the selected tab and detail stay
+   open, wrapped detail lines re-wrap, nothing overlaps.
+4. **Many tabs.** As operator all eight tabs (including Diagnostics) are present
+   and every one is clickable after wrapping; the current tab is greyed and
+   underlined. As a non-operator Diagnostics is absent.
+5. **Long village name.** `/livingvillages debug rename` followed by a ~150
+   character name. The title ends with "…" and never reaches Refresh. Restore a
+   short name afterwards.
+6. **Progression tab.** Shows "Village Tier: …", "Highest unlocked: … | currently
+   qualifies: …", "Next: …", requirement rows with `[✓]`/`[✗]`, capability rows
+   with `[✓]`/`[!]`/`[✗]`, Economy/Infrastructure/Expansion with technologies.
+   Meaning must be readable without colour (check with a greyscale screenshot).
+   Click a long requirement and a technology: details open, long lines wrap
+   inside the viewport, Back returns to the same scroll position.
+7. **Scrolling.** In Chronicle/Plans scroll to both ends with the wheel. The wheel
+   over the header or footer does nothing; the scrollbar thumb stays inside its
+   track; the last row is fully visible above the footer.
+8. **Clicks.** Click Back, Close, Refresh and every tab: none of them selects a
+   content row. Click just below the last visible row: nothing is selected.
+9. **Refresh.** Select a citizen, press Refresh: the tab and the same citizen
+   stay selected. Select a plan, press Refresh and press Escape immediately: the
+   late answer must not reopen the Ledger. Refresh is throttled server-side.
+10. **Compare** a Progression requirement with `/livingvillages progression
+    inspect` — same values, same missing requirements.
+
+Evidence: screenshot per GUI scale × tab group, small/fullscreen screenshots,
+long-name and compact-selector screenshots, client log. Record each step as
+PASS_MANUAL / FAIL with the observed defect.
+
 ## Recording results
 
 For each procedure record `PASS_MANUAL`, `PARTIAL` or `FAIL`, the exact failing
 step and reproduction. Preserve failed evidence. A changed JAR requires rerunning
-affected steps. Keep `1.0.0-dev` while any required graphical or ordinary-world
+affected steps. Keep a `-dev` version while any required graphical or ordinary-world
 restart acceptance remains unperformed.

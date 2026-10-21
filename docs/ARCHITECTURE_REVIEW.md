@@ -137,3 +137,32 @@ Evidence and limits:
   backlog is unchanged; no v1.1 gameplay was added.
 - M1–M3 in MANUAL_ACCEPTANCE.md remain the visual, ordinary generated-world and
   longer survival gates. No manual pass or stable-release claim is made.
+
+## v1.1 progression review — 2026-10-21
+
+Scope: every change on `feature/v1.1-progression` (tiers, capabilities,
+technologies, palettes, production record, Ledger layout, schema 2).
+
+| Area | Finding | Resolution / evidence |
+|---|---|---|
+| Resource duplication | Research could consume at start and again on resume. | Cost stays in the researcher's inventory and is consumed with `Inventories.consume` (all-or-nothing) in the same tick that records the unlock. In-process reload and two-JVM restart both end with exactly the extra 4 logs left (`technologyResumesAfterReloadWithoutDuplication`, restart `physical_remaining={minecraft:oak_log=4}`). |
+| Item loss | Interrupted research loses nothing silently. | Restart: items persist as vanilla entity data. Death: existing handler drops cargo and blocks the task; progress units remain; a new worker re-fetches. |
+| Duplicate level-up events | Re-evaluation, restored saves, tier jumps. | `tierHistory.putIfAbsent` guards each event; tier never decreases; unit tests for oscillation/jumps; natural GameTest checks exactly one event after five more evaluations and after a codec round trip; soak asserts unique milestones. |
+| Duplicate technology completion | Second plan or stray resumed plan. | Policy never offers an unlocked technology; one research plan at a time; `ResearchJob` returns carried materials (DELIVER) instead of consuming when already unlocked. |
+| Stuck plans | Missing materials or workstation. | Plans depend on `GATHER_WOOD:<log>`/MINE/CRAFT/`PLACE:<workstation>`; executor blocks with backoff (`technologyWithoutResourcesBlocksWithoutUnlock`: ≤ 6 spaced attempts in 2,500 ticks). Technologies whose plan FAILED are skipped by selection, so research does not halt on one failure. |
+| Palette deadlock | Biome bonus (6) could outweigh a few real logs and select a wood with no trees, so `GATHER_WOOD:<log>` could never succeed. | **Fixed in review:** biome is a 0.5 tie-break; unit test asserts one real birch log beats a taiga biome. |
+| Cargo churn | `fetch` donor path could take reserved research cost out of the researcher. | **Fixed in review:** donors working another plan that reserves the item are skipped. |
+| Save migration | v1 in-flight oak construction must not change material. | Explicit `migrateV1`: oak for v1 construction/CRAFT plans/buildings; literal v1.0 document test checks UUIDs, XP, plans, blockers, history, buildings, progress and re-encode. Version read from raw JSON; >2 rejected. |
+| Stale references | Technology record researcher may die/unload. | Ledger resolves names lazily with UUID fallback; records are history, not live references. |
+| Chunk unload | Progression on unloaded villages. | Evaluated only on the strategic tick (center loaded, index ready). Executors keep `CHUNK_UNAVAILABLE` semantics. No new world mutation path. |
+| Removed storage | Research and tier STORAGE facts. | Stock removes invalid references (v1.0); tier facts count only live distinct references; fetch blocks with `STORAGE_MISSING`. |
+| Palette state | Restart must not turn spruce into oak. | `Plan.palette`/`Building.palette` persisted; prefix validation would report `WORLD_CHANGED` if lost. GameTest + two-JVM restart complete a spruce house and inspect it as COMPLETE. |
+| Blueprint packaging | Unknown `capability` in a template would throw mid-planning. | **Fixed in review:** validated at load. Missing palette blocks throw at resolution (never silently air). |
+| Production accounting | Crafting bread from wheat would count food twice; transfers could look like production. | FOOD counts harvested crops only; record is written only at loot/furnace/craft/shear sources; drop listener uses NeoForge's final list and ignores cancelled events. |
+| Ledger payload | New tab adds rows. | Same per-row/field/escaped-size bounds; `ledgerProgressionDataRemainsBounded` with 600 plans, 6,000 events, 40 citizens. Protocol version bumped to 3. |
+| Ledger visuals | v1.0 drew text before `super.render`, whose 1.21 blurred menu background then covered it; positions were ad hoc. | Panel in `renderBackground`; all areas from `LedgerLayout`; property tests over GUI scale 1–4/Auto for ten window sizes and 7,280 resized sizes (two tab sets) assert containment and no overlap. Graphical M4 still MANUAL_REQUIRED. |
+| Performance | Facts per executor tick, drop listener on every block break. | Facts are O(citizens + buildings), computed once per tick per executor; listener exits unless the breaker is a villager; progression/palette reuse the strategic tick's stock and indexes. Soak work-call means are unchanged within noise (86–94 µs). |
+
+Accepted limits: production before migration is unknown; diamond mining is
+rare without shafts; Tier IV/V balance is unmeasured in survival; power loss
+between entity and SavedData saves remains non-atomic (v1.0 limit).

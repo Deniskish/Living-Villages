@@ -44,10 +44,18 @@ public final class ProgressionGameTests {
     @GameTest(template="empty",batch="progression_natural",timeoutTicks=40000,skyAccess=true)
     public static void villageNaturallyReachesTierTwoExactlyOnce(GameTestHelper h) {
         var level=h.getLevel();var data=VillageSavedData.get(level);
-        Natural fixture=natural(level,0,6,6);Village v=fixture.village;
-        h.assertTrue(v.tier==Tier.SETTLEMENT,"Starts as a settlement");
+        BlockPos base=reserve(level,0,40,24);Natural[] built={null};
         long[] reachedAt={-1};
         h.onEachTick(()->{
+            if(built[0]==null) {
+                if(!ticking(level,base,40,24))return;
+                // Seven beds: below population + 2, so the village still has to build a house itself,
+                // with headroom for a vanilla birth (babies register as citizens).
+                built[0]=natural(level,base,0,6,6,7);
+                h.assertTrue(built[0].village.tier==Tier.SETTLEMENT,"Starts as a settlement");return;
+            }
+            Natural fixture=built[0];Village v=fixture.village;
+            if(reachedAt[0]<0&&h.getTick()>=38000) { fixture.close(level,data);h.fail("Tier II not reached: "+state(v)); }
             if(reachedAt[0]<0&&v.tier==Tier.VILLAGE)reachedAt[0]=h.getTick();
             if(reachedAt[0]<0||h.getTick()<reachedAt[0]+1000)return; // Five more strategic evaluations.
             try {
@@ -68,13 +76,18 @@ public final class ProgressionGameTests {
     @GameTest(template="empty",batch="progression_natural",timeoutTicks=40000,skyAccess=true)
     public static void incompleteRequirementsDoNotLevelUp(GameTestHelper h) {
         var level=h.getLevel();var data=VillageSavedData.get(level);
-        Natural fixture=natural(level,1,6,4); // Four trees: at most 12 logs can ever be harvested.
-        Village v=fixture.village;long[] stableAt={-1};
+        BlockPos base=reserve(level,1,40,24);Natural[] built={null};long[] stableAt={-1};
         h.onEachTick(()->{
+            if(built[0]==null) {
+                if(ticking(level,base,40,24))built[0]=natural(level,base,1,6,4,6); // Four trees: at most 12 logs.
+                return;
+            }
+            Natural fixture=built[0];Village v=fixture.village;
             var s=v.progression;
             boolean settled=s!=null&&v.buildings.values().stream().anyMatch(b->b.category.equals("HOUSING"))
                     &&ProductionCategory.WOOD.total(v.production)==12&&ProductionCategory.FOOD.total(v.production)>=16;
             if(stableAt[0]<0&&settled)stableAt[0]=h.getTick();
+            if(stableAt[0]<0&&h.getTick()>=38000) { fixture.close(level,data);h.fail("Fixture did not settle: "+state(v)); }
             if(stableAt[0]<0||h.getTick()<stableAt[0]+1000)return;
             try {
                 h.assertTrue(tierEvents(v).isEmpty()&&v.tier==Tier.SETTLEMENT,"No level-up without wood production");
@@ -98,7 +111,16 @@ public final class ProgressionGameTests {
     /** 3. A historical Tier II village smelts real iron; the eighth ingot raises it to Tier III once. */
     @GameTest(template="empty",timeoutTicks=12000,skyAccess=true)
     public static void villageReachesTierThreeThroughPhysicalIronProduction(GameTestHelper h) {
-        var level=h.getLevel();BlockPos base=plot(level,2,48,20);
+        var level=h.getLevel();BlockPos base=reserve(level,2,48,20);
+        Runnable[] driver={null};
+        h.onEachTick(()->{
+            if(driver[0]!=null) { driver[0].run();return; }
+            if(ticking(level,base,48,20))driver[0]=townFixture(h,level,base);
+        });
+    }
+    /** Builds the Tier III fixture once its chunks tick and returns the per-tick smelting driver. */
+    private static Runnable townFixture(GameTestHelper h,ServerLevel level,BlockPos base) {
+        prepare(level,base,48,20);
         Village v=village(level,base.offset(24,1,10),24);v.tier=Tier.VILLAGE;v.tierHistory.put("VILLAGE",level.getGameTime()-24000);
         // Persisted record of earlier wood/food production (the village already reached Tier II).
         v.production.put("minecraft:oak_log",64L);v.production.put("minecraft:wheat",64L);
@@ -127,7 +149,7 @@ public final class ProgressionGameTests {
         Citizen smith=v.citizens.get(workers.getFirst().getUUID());
         WorkContext[] current={smelt(level,v,smith,workers.getFirst(),observed,chronicle)};
         int[] cycles={0};
-        h.onEachTick(()->{
+        return ()->{
             if(h.getTick()%10!=0)return;
             step(current[0],new SmeltingJob());
             if(current[0].plan().state()!=State.COMPLETED)return;
@@ -149,7 +171,7 @@ public final class ProgressionGameTests {
                 h.assertTrue(snapshot.nextTier()==Tier.CITY&&!snapshot.missingRequirements().isEmpty(),"Next tier explained");
             } finally { close(level,base,48,20,v); }
             h.succeed();
-        });
+        };
     }
 
     // ---------------------------------------------------------------- technology
@@ -431,10 +453,10 @@ public final class ProgressionGameTests {
         void close(ServerLevel level,VillageSavedData data) { ProgressionGameTests.close(level,base,40,24,village);data.setDirty(); }
     }
     /** Remote plot driven only by the production Simulation (planner, scheduler, jobs). */
-    private static Natural natural(ServerLevel level,int slot,int citizens,int trees) {
+    private static Natural natural(ServerLevel level,BlockPos base,int slot,int citizens,int trees,int beds) {
         level.setDayTime(1000);
         level.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_DAYLIGHT).set(false,level.getServer());
-        BlockPos base=plot(level,slot,40,24);
+        prepare(level,base,40,24);
         Village v=village(level,base.offset(20,1,12),20);v.name="Natural "+slot;v.createdAt=level.getGameTime()-2000;
         BlockPos chest=base.offset(3,1,3);level.setBlock(chest,Blocks.CHEST.defaultBlockState(),3);v.storage.add(of(chest));
         level.setBlock(base.offset(5,1,3),Blocks.CRAFTING_TABLE.defaultBlockState(),3);
@@ -442,14 +464,19 @@ public final class ProgressionGameTests {
         new Blueprints().get("house_t1_01").manifest().forEach((id,n)->Inventories.insert(container,new ItemStack(Inventories.item(id),n)));
         for(var e:Map.of(Items.OAK_PLANKS,16,Items.BREAD,16,Items.WHEAT_SEEDS,16,Items.WOODEN_PICKAXE,2).entrySet())
             Inventories.insert(container,new ItemStack(e.getKey(),e.getValue()));
-        for(int i=0;i<6;i++)bed(level,base.offset(4+i*2,1,19));
+        for(int i=0;i<beds;i++)bed(level,base.offset(4+i*2,1,19));
         for(int i=0;i<trees;i++)tree(level,base.offset(27+(i%3)*4,1,3+(i/3)*4),Blocks.OAK_LOG,Blocks.OAK_LEAVES);
         for(int x=26;x<31;x++)for(int z=16;z<20;z++) {
             level.setBlock(base.offset(x,0,z),Blocks.FARMLAND.defaultBlockState(),3);
             level.setBlock(base.offset(x,1,z),Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);
         }
         for(int i=0;i<citizens;i++)villager(level,v,base.offset(8+i%3,1,8+i/3),Role.values()[i%Role.values().length],"Natural "+slot+"/"+i,0);
-        VillageSavedData.get(level).world.villages.put(v.id,v);VillageSavedData.get(level).setDirty();
+        // A timed-out earlier run never reaches its cleanup; its registered village would own
+        // this plot (nearest center, UUID tie-break). GameTest has no teardown on timeout.
+        var villages=VillageSavedData.get(level).world.villages;
+        villages.values().removeIf(old->old.center.x()>=base.getX()&&old.center.x()<base.getX()+40
+                &&old.center.z()>=base.getZ()&&old.center.z()<base.getZ()+24);
+        villages.put(v.id,v);VillageSavedData.get(level).setDirty();
         return new Natural(v,base);
     }
     private record Research(Village village,Plan plan,Citizen smith,Villager worker,Observations observed,Pos chestPos,GameTestHelper h) {
@@ -544,21 +571,37 @@ public final class ProgressionGameTests {
         for(Citizen c:v.citizens.values())if(level.getEntity(c.id) instanceof Villager e)Inventories.addStock(e.getInventory(),stock);
         return stock;
     }
+    private static String state(Village v) {
+        return "tier="+v.tier+" pop="+v.population()+" beds="+v.beds+" production="+v.production+" missing="
+                +(v.progression==null?"not evaluated":v.progression.missingRequirements().stream().map(Requirement::message).toList())
+                +" plans="+v.activePlans().stream().map(p->p.kind+":"+p.state()+(p.blocker==null?"":"/"+p.blocker.message())).toList();
+    }
     private static List<Event> tierEvents(Village v) { return v.history.stream().filter(e->e.type().equals("VILLAGE_TIER_REACHED")).toList(); }
     private static List<Event> unlocks(Village v) { return v.history.stream().filter(e->e.type().equals("TECHNOLOGY_UNLOCKED")).toList(); }
     private static World worldOf(Village v) { World w=new World();w.villages.put(v.id,v);return w; }
-    /** Remote, force-loaded flat plot reserved for one test slot; cleared before reuse. */
-    private static BlockPos plot(ServerLevel level,int slot,int width,int depth) {
+    /** Remote plot reserved for one test slot; force-loads it. Build only once {@link #ticking}. */
+    private static BlockPos reserve(ServerLevel level,int slot,int width,int depth) {
         BlockPos base=new BlockPos(REMOTE+slot*128,REMOTE_Y,REMOTE);
         force(level,base,width,depth,true);
-        for(var old:level.getEntitiesOfClass(net.minecraft.world.entity.Entity.class,
-                new net.minecraft.world.phys.AABB(base).expandTowards(width,12,depth).inflate(2)))old.discard();
+        return base;
+    }
+    /** Entity storage loads asynchronously; earlier runs' entities are only visible once chunks tick. */
+    private static boolean ticking(ServerLevel level,BlockPos base,int width,int depth) {
+        return level.isPositionEntityTicking(base)&&level.isPositionEntityTicking(base.offset(width,0,0))
+                &&level.isPositionEntityTicking(base.offset(0,0,depth))&&level.isPositionEntityTicking(base.offset(width,0,depth));
+    }
+    /**
+     * Clears a previous run's plot. Blocks first: removing an old chest drops its contents,
+     * so the entity sweep (villagers, dropped bread) must come after it.
+     */
+    private static void prepare(ServerLevel level,BlockPos base,int width,int depth) {
         for(int x=0;x<width;x++)for(int z=0;z<depth;z++) {
             for(int y=1;y<=10;y++)level.setBlock(base.offset(x,y,z),Blocks.AIR.defaultBlockState(),2);
             level.setBlock(base.offset(x,0,z),Blocks.GRASS_BLOCK.defaultBlockState(),2);
             if(x==0||x==width-1||z==0||z==depth-1)level.setBlock(base.offset(x,1,z),Blocks.OAK_FENCE.defaultBlockState(),3);
         }
-        return base;
+        for(var old:level.getEntitiesOfClass(net.minecraft.world.entity.Entity.class,
+                new net.minecraft.world.phys.AABB(base).expandTowards(width,12,depth).inflate(2)))old.discard();
     }
     private static void close(ServerLevel level,BlockPos base,int width,int depth,Village v) {
         for(Citizen c:v.citizens.values())if(level.getEntity(c.id)!=null)level.getEntity(c.id).discard();
