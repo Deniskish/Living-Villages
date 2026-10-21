@@ -3,6 +3,7 @@ import dev.livingvillages.config.VillageConfig;
 import dev.livingvillages.domain.*;
 import dev.livingvillages.domain.Model.*;
 import dev.livingvillages.history.Chronicle;
+import dev.livingvillages.progression.*;
 import dev.livingvillages.resource.Inventories;
 import dev.livingvillages.world.Observations;
 import dev.livingvillages.world.Positions;
@@ -32,6 +33,18 @@ public record WorkContext(ServerLevel level,Village village,Plan plan,Task task,
     public void block(Reason reason,String message) { block(reason,message,task.target,"",0,0); }
     public void progress() { task.progress(now()); plan.progress(now()); }
     public void xp(int n) { chronicle.xp(village,citizen,now(),n); }
+    /** Records goods that this action physically produced (never transfers or deliveries). */
+    public void produced(String item,int count) { dev.livingvillages.world.ProgressionService.recordProduction(chronicle,village,item,count,now()); }
+    public CapabilityStatus capability(VillageCapability capability) {
+        return dev.livingvillages.world.Capabilities.status(village,capability,observations);
+    }
+    /** Structured CAPABILITY_LOCKED / INFRASTRUCTURE_MISSING blocker for this task. */
+    public void blockCapability(CapabilityStatus status) {
+        if(status.available())throw new IllegalArgumentException("Capability is available: "+status.capability());
+        var missing=status.requirements().stream().filter(r->!r.fulfilled()).findFirst();
+        block(status.reason(),CapabilityPolicy.explain(status),task.target,status.capability().name(),
+                missing.map(r->(int)r.required()).orElse(1),missing.map(r->(int)r.actual()).orElse(0));
+    }
     public void equipped() {
         worker.setDropChance(net.minecraft.world.entity.EquipmentSlot.MAINHAND,1.0F);
         citizen.equipment=worker.getMainHandItem().toString();
@@ -97,7 +110,7 @@ public record WorkContext(ServerLevel level,Village village,Plan plan,Task task,
         }).min(Comparator.comparingDouble(p->worker.distanceToSqr(p.x(),p.y(),p.z()))).orElse(null);
         if(source==null) {
             for(Citizen carrier:village.citizens.values()) {
-                if(carrier.id.equals(citizen.id)||carrier.dead)continue;
+                if(carrier.id.equals(citizen.id)||carrier.dead||carriesFor(carrier,item))continue;
                 if(level.getEntity(carrier.id) instanceof Villager donor&&Inventories.count(donor.getInventory(),item)>0) {
                     if(!move(of(donor.blockPosition())))return false;
                     if(Inventories.transfer(donor.getInventory(),worker.getInventory(),item,amount-carried)>0)progress();
@@ -113,6 +126,13 @@ public record WorkContext(ServerLevel level,Village village,Plan plan,Task task,
         if(Inventories.transfer(inv,worker.getInventory(),item,amount-carried)>0)progress();
         else block(Reason.STORAGE_FULL,"Worker inventory is full");
         return Inventories.count(worker.getInventory(),item)>=amount;
+    }
+    /** True when the carrier is working a different plan that reserves this item (e.g. research cost). */
+    private boolean carriesFor(Citizen carrier,String item) {
+        if(carrier.currentTask==null)return false;
+        for(Plan other:village.activePlans())
+            if(other!=plan&&other.reservations.getOrDefault(item,0)>0&&other.tasks.stream().anyMatch(t->carrier.currentTask.equals(t.id)))return true;
+        return false;
     }
     public boolean deliver() {
         if(worker.getInventory().isEmpty())return true;

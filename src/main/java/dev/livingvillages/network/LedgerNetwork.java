@@ -16,7 +16,8 @@ public final class LedgerNetwork {
     private LedgerNetwork() {}
     public static void clientReceiver(BiConsumer<String,Boolean> callback) { receiver=callback; }
     public static void register(RegisterPayloadHandlersEvent event) {
-        var registrar=event.registrar("2");
+        // Bump when the snapshot schema changes; mismatched client/server builds are refused.
+        var registrar=event.registrar("3");
         registrar.playToClient(LedgerPayload.TYPE,LedgerPayload.CODEC,(payload,context)->context.enqueueWork(()->receiver.accept(payload.json(),payload.refresh())));
         registrar.playToServer(RefreshPayload.TYPE,RefreshPayload.CODEC,LedgerNetwork::refresh);
     }

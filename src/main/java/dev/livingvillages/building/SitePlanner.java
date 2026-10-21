@@ -27,7 +27,7 @@ public final class SitePlanner {
             Pos site=new Pos(column.getX(),y,column.getZ());
             String rejection=validate(c,blueprint,site);
             if(!rejection.isEmpty()) { reject(c,rejection);continue; }
-            Pos entrance=site.offset(2,1,-1);
+            Pos entrance=site.offset(blueprint.entrance().x(),blueprint.entrance().y(),blueprint.entrance().z());
             var path=WorkerNavigation.approach(c.level(),c.worker(),entrance.offset(0,-1,0),entrance.offset(0,-1,0));
             if(path==null) { reject(c,"PATH");continue; }
             long pathDistance=c.observations().paths.stream().mapToLong(p->p.distanceSquared(entrance)).min().orElse(400);
@@ -56,13 +56,13 @@ public final class SitePlanner {
                     &&!support.is(net.minecraft.tags.BlockTags.SAND))return "PROTECTED_SUPPORT";
             int height=c.level().getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,p.getX(),p.getZ());
             if(height!=site.y())return "SLOPE";
-            for(int y=0;y<5;y++) {
+            for(int y=0;y<Math.max(5,bp.height());y++) {
                 var state=c.level().getBlockState(p.above(y));
                 if(!state.getFluidState().isEmpty())return "WATER";
                 if(!state.canBeReplaced()||c.level().getBlockEntity(p.above(y))!=null)return "COLLISION";
             }
         }
-        BlockPos entrance=block(site.offset(2,0,-1));
+        BlockPos entrance=block(site.offset(bp.entrance().x(),0,bp.entrance().z()));
         if(!c.level().hasChunkAt(entrance))return "CHUNK_UNAVAILABLE";
         if(!c.level().getBlockState(entrance).canBeReplaced()||!c.level().getBlockState(entrance.above()).canBeReplaced())return "ENTRANCE";
         return "";

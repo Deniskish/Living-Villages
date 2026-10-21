@@ -15,7 +15,8 @@ public final class WoolJob implements Job {
             if(!c.move(c.task().target))return;
             for(ItemEntity item:c.level().getEntitiesOfClass(ItemEntity.class,new AABB(block(c.task().target)).inflate(2))) {
                 if(c.worker().distanceToSqr(item)>6.25||!item.getItem().is(Items.WHITE_WOOL))continue;
-                Inventories.insert(c.worker().getInventory(),item.getItem());
+                int accepted=Inventories.insert(c.worker().getInventory(),item.getItem());
+                if(accepted>0)c.produced("minecraft:white_wool",accepted);
                 if(item.getItem().isEmpty())item.discard();
             }
             c.task().phase="DELIVER";c.progress();return;

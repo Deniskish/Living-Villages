@@ -6,6 +6,7 @@ import dev.livingvillages.network.*;
 import dev.livingvillages.persistence.VillageSavedData;
 import dev.livingvillages.resource.Inventories;
 import dev.livingvillages.world.*;
+import dev.livingvillages.progression.ProductionCategory;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.world.entity.EntityType;
@@ -74,7 +75,7 @@ public final class HardeningGameTests {
     @GameTest(template="empty",timeoutTicks=200)
     public static void ledgerLargeAndEmptyDataRemainBounded(GameTestHelper h) {
         var empty=new LedgerView(UUID.randomUUID(),null,null);
-        h.assertTrue(LedgerView.parse(empty.json()).tabs().size()==6,"Empty snapshots retain six safe tabs");
+        h.assertTrue(LedgerView.parse(empty.json()).tabs().size()==7,"Empty snapshots retain seven safe tabs");
         List<LedgerView.Row> rows=new ArrayList<>();
         for(int i=0;i<2000;i++)rows.add(new LedgerView.Row("Long "+i+"x".repeat(3000),Collections.nCopies(100,"\\\"\n".repeat(2000))));
         var large=new LedgerView(UUID.randomUUID(),"Large".repeat(200),Map.of("Citizens",rows,"Chronicle",rows,"Plans",rows,"Diagnostics",rows));
@@ -161,6 +162,10 @@ public final class HardeningGameTests {
                     h.assertTrue(v.storage.stream().allMatch(p->Ownership.owns(level,v,p)),"Storage isolation");
                     h.assertTrue(v.plans.size()<400&&v.history.size()<5000,"No uncontrolled idle plan/event growth");
                     h.assertTrue(v.scanSteps<=4801&&v.strategicSteps<=241,"Scan/strategy frequency bounded");
+                    h.assertTrue(v.progression!=null&&v.progression.evaluatedAt()>0,"Progression evaluated on the strategic tick");
+                    var tiers=v.history.stream().filter(e->e.type().equals("VILLAGE_TIER_REACHED")).map(e->e.parameters().get("tier")).toList();
+                    h.assertTrue(tiers.size()==new HashSet<>(tiers).size()&&tiers.size()==v.tierHistory.size()-1,"Unique tier milestones: "+tiers);
+                    h.assertTrue(ProductionCategory.WOOD.total(v.production)>0,"Wood production recorded from real drops");
                     dev.livingvillages.LivingVillagesMod.LOG.info(
                             "event=acceptance_soak village={} ticks=48000 citizens={} plans={} active={} events={} buildings={} scans={} strategies={} work={} mean_work_us={} max_work_us={}",
                             v.name,v.citizens.size(),v.plans.size(),v.activePlans().size(),v.history.size(),v.buildings.size(),

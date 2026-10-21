@@ -37,7 +37,10 @@ class DomainTest {
         assertEquals(2,Rules.miningLevel("minecraft:deepslate_copper_ore"));
         assertEquals(3,Rules.miningLevel("minecraft:iron_ore"));
         assertEquals(4,Rules.miningLevel("minecraft:redstone_ore"));
-        assertEquals(Integer.MAX_VALUE,Rules.miningLevel("minecraft:diamond_ore"));
+        // v1.1: diamond is Miner V and additionally gated by the DIAMOND_MINING capability.
+        assertEquals(5,Rules.miningLevel("minecraft:diamond_ore"));
+        assertEquals(5,Rules.miningLevel("minecraft:deepslate_diamond_ore"));
+        assertEquals(Integer.MAX_VALUE,Rules.miningLevel("minecraft:emerald_ore"));
     }
     @Test void blockedRequiresExplanationAndTerminalWorkCannotRestart() {
         Plan p=new Plan();

@@ -12,7 +12,7 @@ public final class BuildingInspection {
         int index=(int)((level.getGameTime()/200)%village.buildings.size());
         Building building=village.buildings.values().stream().skip(index).findFirst().orElseThrow();
         String condition="COMPLETE";
-        for(var cell:blueprints.get(building.blueprint).cells()) {
+        for(var cell:blueprints.get(building.blueprint,building.palette).cells()) {
             var pos=block(building.origin.offset(cell.offset().x(),cell.offset().y(),cell.offset().z()));
             if(!level.hasChunkAt(pos)) { condition="UNLOADED";break; }
             if(!Blueprints.matches(level.getBlockState(pos),cell.state())) { condition="DAMAGED";break; }

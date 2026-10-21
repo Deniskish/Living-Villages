@@ -42,7 +42,8 @@ public final class VillageGameTests {
     @GameTest(template="empty")
     public static void manifestsCountBedAndDoorOnce(GameTestHelper h) {
         var blueprints=new Blueprints();
-        h.assertTrue(blueprints.all().size()==6,"Six templates");
+        h.assertTrue(blueprints.all().size()==7&&Blueprints.IDS.containsAll(List.of("house_t1_01","house_t1_02","house_t1_03","storage_t1","animal_pen_t1","smithy_t1")),
+                "Six v1.0 templates retained plus the v1.1 timber house");
         var house=blueprints.get("house_t1_01");
         h.assertTrue(house.manifest().get("minecraft:white_bed")==1,"One item per two-part bed");
         h.assertTrue(house.manifest().get("minecraft:oak_door")==1,"One item per two-part door");
@@ -351,8 +352,8 @@ public final class VillageGameTests {
         WorkContext c=context(h,Role.BUILDER,new BlockPos(3,1,3));
         c.block(Reason.MISSING_RESOURCE,"minecraft:oak_planks required=64 available=0",null,"minecraft:oak_planks",64,0);
         var regular=dev.livingvillages.network.LedgerView.create(h.getLevel(),c.village(),false);
-        h.assertTrue(regular.tabs().keySet().equals(Set.of("Overview","Citizens","Resources","Buildings","Plans","Chronicle")),
-                "All six player tabs without admin diagnostics");
+        h.assertTrue(regular.tabs().keySet().equals(Set.of("Overview","Citizens","Resources","Buildings","Plans","Progression","Chronicle")),
+                "All seven player tabs without admin diagnostics");
         var admin=dev.livingvillages.network.LedgerView.parse(
                 dev.livingvillages.network.LedgerView.create(h.getLevel(),c.village(),true).json());
         h.assertTrue(admin.village().equals(c.village().id),"Snapshot identity survives network serialization");

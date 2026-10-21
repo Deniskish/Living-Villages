@@ -25,6 +25,7 @@ public final class LivingVillagesMod {
         NeoForge.EVENT_BUS.addListener(dev.livingvillages.command.VillageCommands::register);
         NeoForge.EVENT_BUS.addListener(this::tick);
         NeoForge.EVENT_BUS.addListener(this::death);
+        NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST,simulation::drops);
         NeoForge.EVENT_BUS.addListener(this::stopped);
     }
     private void tick(LevelTickEvent.Post e) { if(e.getLevel() instanceof ServerLevel level)simulation.tick(level); }

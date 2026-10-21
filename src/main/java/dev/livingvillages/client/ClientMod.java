@@ -11,9 +11,12 @@ public final class ClientMod {
             if(client.level==null||client.player==null)return;
             try {
                 var view=LedgerView.parse(json);
-                if(refresh) {
-                    if(client.screen instanceof LedgerScreen screen)screen.refresh(view);
-                } else client.setScreen(new LedgerScreen(view));
+                var open=client.screen instanceof LedgerScreen screen?screen:null;
+                switch(LedgerRouting.route(refresh,open==null?null:open.village(),view.village())) {
+                    case OPEN -> client.setScreen(new LedgerScreen(view));
+                    case UPDATE -> open.refresh(view);
+                    case IGNORE -> { }
+                }
             } catch(RuntimeException error) {
                 dev.livingvillages.LivingVillagesMod.LOG.error("event=ledger_decode_failure",error);
                 client.player.displayClientMessage(net.minecraft.network.chat.Component.literal("Unable to read Village Ledger snapshot."),false);

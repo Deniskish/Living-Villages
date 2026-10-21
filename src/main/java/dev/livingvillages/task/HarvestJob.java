@@ -1,6 +1,7 @@
 package dev.livingvillages.task;
 import dev.livingvillages.domain.Model.*;
 import dev.livingvillages.domain.Rules;
+import dev.livingvillages.progression.VillageCapability;
 import dev.livingvillages.resource.Inventories;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -17,8 +18,18 @@ import static dev.livingvillages.world.Positions.*;
 
 /** A loaded-world gather loop; every drop comes from the block loot table. */
 public final class HarvestJob implements Job {
+    public static final String DIAMOND="minecraft:diamond";
+    /** Mining limits evaluated once per tick from village capabilities. */
+    private record Mining(int minY,boolean diamonds) {}
+    private static Mining mining(WorkContext c) {
+        if(c.task().role!=Role.MINER)return null;
+        boolean advanced=c.capability(VillageCapability.ADVANCED_MINING).available();
+        boolean diamonds=c.task().desiredResource.equals(DIAMOND)&&c.capability(VillageCapability.DIAMOND_MINING).available();
+        return new Mining(c.village().center.y()-6-(advanced?VillageCapability.ADVANCED_MINING_DEPTH:0),diamonds);
+    }
     @Override public void tick(WorkContext c) {
         Task t=c.task();
+        Mining mining=mining(c);
         if(t.phase.equals("DELIVER")) { if(c.deliver())c.finish();return; }
         if(t.phase.equals("COLLECT")) {
             Pos pickup=t.role==Role.LUMBERJACK&&t.workOrigin!=null?t.workOrigin:t.target;
@@ -47,6 +58,9 @@ public final class HarvestJob implements Job {
             return;
         }
         if(t.target==null) {
+            if(t.role==Role.MINER&&t.desiredResource.equals(DIAMOND)&&!mining.diamonds()) {
+                c.blockCapability(c.capability(VillageCapability.DIAMOND_MINING));return;
+            }
             if(t.role==Role.LUMBERJACK&&!t.targets.isEmpty()) {
                 t.targets.removeIf(p->!c.level().hasChunkAt(block(p))||!c.level().getBlockState(block(p)).is(BlockTags.LOGS));
                 t.target=t.targets.stream().max(Comparator.comparingInt(Pos::y)).orElse(null);
@@ -56,7 +70,7 @@ public final class HarvestJob implements Job {
                 case MINER -> c.observations().stone;
                 default -> c.observations().crops;
             };
-            if(t.target==null)t.target=candidates.stream().filter(p->valid(c,p)).sorted(Comparator.comparingLong(p->p.distanceSquared(of(c.worker().blockPosition()))))
+            if(t.target==null)t.target=candidates.stream().filter(p->valid(c,p,mining)).sorted(Comparator.comparingLong(p->p.distanceSquared(of(c.worker().blockPosition()))))
                     .limit(6).filter(p-> {
                         return WorkerNavigation.approach(c.level(),c.worker(),p)!=null;
                     }).findFirst().orElse(null);
@@ -74,7 +88,7 @@ public final class HarvestJob implements Job {
             t.phase="HARVEST";c.progress();
         }
         if(!c.loaded(t.target))return;
-        if(!valid(c,t.target)) { t.target=null;c.block(Reason.TARGET_MISSING,"Harvest target changed");return; }
+        if(!valid(c,t.target,mining)) { t.target=null;c.block(Reason.TARGET_MISSING,"Harvest target changed");return; }
         if(!tool(c))return;
         if(!c.interactAt(t.target,t.role==Role.LUMBERJACK&&t.workOrigin!=null?t.workOrigin.y():t.target.y()))return;
         if(t.actionStarted==0) { t.actionStarted=c.now();c.progress();return; }
@@ -99,7 +113,7 @@ public final class HarvestJob implements Job {
             t.phase="COLLECT";t.actionStarted=c.now();c.progress();c.xp(2);
         } else c.block(Reason.WORLD_CHANGED,"World rejected harvest");
     }
-    private boolean valid(WorkContext c,Pos p) {
+    private boolean valid(WorkContext c,Pos p,Mining mining) {
         if(!dev.livingvillages.world.Ownership.owns(c.level(),c.village(),p)||!c.level().hasChunkAt(block(p)))return false;
         var s=c.level().getBlockState(block(p));
         if(c.village().buildings.values().stream().anyMatch(b->b.origin.distanceSquared(p)<100))return false;
@@ -107,8 +121,12 @@ public final class HarvestJob implements Job {
         if(c.task().role==Role.MINER) {
             if(c.task().desiredResource.equals("minecraft:raw_iron")&&!s.is(BlockTags.IRON_ORES))return false;
             if(c.task().desiredResource.equals("minecraft:coal")&&!s.is(BlockTags.COAL_ORES))return false;
-            if(Rules.miningLevel(BuiltInRegistries.BLOCK.getKey(s.getBlock()).toString())>c.citizen().level())return false;
-            if(p.y()<c.village().center.y()-6||p.y()>=c.worker().blockPosition().getY()+2)return false;
+            String id=BuiltInRegistries.BLOCK.getKey(s.getBlock()).toString();
+            // Diamond ore is only a target of the dedicated, capability-checked diamond plan.
+            boolean diamond=Rules.diamond(id);
+            if(diamond!=c.task().desiredResource.equals(DIAMOND)||diamond&&!mining.diamonds())return false;
+            if(Rules.miningLevel(id)>c.citizen().level())return false;
+            if(p.y()<mining.minY()||p.y()>=c.worker().blockPosition().getY()+2)return false;
             // Only exposed faces; no tunnels, undermining, fluid/gravity adjacency or block entities.
             boolean exposed=false;
             for(Direction d:Direction.values()) {
@@ -123,6 +141,8 @@ public final class HarvestJob implements Job {
         }
         if(!s.is(BlockTags.LOGS))return false;
         if(c.task().targets.contains(p))return true;
+        // A palette-specific acquisition gathers only its own wood family.
+        if(!c.task().desiredResource.isEmpty()&&!c.task().desiredResource.equals(BuiltInRegistries.BLOCK.getKey(s.getBlock()).toString()))return false;
         // Conservative natural-tree evidence: a soil-rooted vertical trunk plus nearby leaves.
         BlockPos root=block(p);
         for(int i=0;i<8&&c.level().getBlockState(root.below()).is(BlockTags.LOGS);i++)root=root.below();

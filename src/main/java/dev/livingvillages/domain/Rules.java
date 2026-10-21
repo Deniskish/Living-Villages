@@ -24,7 +24,23 @@ public final class Rules {
         if (id.endsWith("copper_ore")) return 2;
         if (id.endsWith("iron_ore")) return 3;
         if (id.endsWith("gold_ore")||id.endsWith("redstone_ore")||id.endsWith("lapis_ore")) return 4;
-        return Integer.MAX_VALUE; // Diamond explicitly awaits village progression.
+        // Diamond additionally requires the village DIAMOND_MINING capability (CapabilityPolicy).
+        if (id.endsWith("diamond_ore")) return 5;
+        return Integer.MAX_VALUE;
+    }
+    public static boolean diamond(String blockId) { return blockId.endsWith("diamond_ore"); }
+    private static final String[] NUMERALS={"I","II","III","IV","V"};
+    public static String numeral(int level) {
+        return level>=1&&level<=NUMERALS.length?NUMERALS[level-1]:Integer.toString(level);
+    }
+    /** Edible stock in planner food units; wheat is an ingredient, not food. */
+    public static int foodUnits(Map<String,Integer> stock) {
+        return stock.getOrDefault("minecraft:bread",0)*4+stock.getOrDefault("minecraft:carrot",0)
+                +stock.getOrDefault("minecraft:potato",0)+stock.getOrDefault("minecraft:beetroot",0);
+    }
+    /** Logs of every wood family; palettes decide which family construction consumes. */
+    public static int logs(Map<String,Integer> stock) {
+        int n=0;for(var e:stock.entrySet())if(e.getKey().endsWith("_log"))n+=e.getValue();return n;
     }
     public static Map<String,Integer> reserve(Map<String,Integer> stock,Map<String,Integer> claimed,
                                                Map<String,Integer> demand) {

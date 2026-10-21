@@ -6,7 +6,19 @@ import java.util.*;
 public final class Model {
     private Model() {}
     public enum Role { LUMBERJACK, FARMER, MINER, ANIMAL_KEEPER, SMITH, BUILDER }
-    public enum Need { FOOD, HOUSING, WOOD, STONE, METAL, TOOLS, STORAGE, WORKFORCE }
+    public enum Need { FOOD, HOUSING, WOOD, STONE, METAL, TOOLS, STORAGE, WORKFORCE, DEVELOPMENT }
+    /** Settlement development stage. Persisted by name; the order is the progression order. */
+    public enum Tier {
+        SETTLEMENT("Settlement"), VILLAGE("Village"), TOWN("Town"), CITY("City"), CAPITAL("Capital");
+        private final String title;
+        Tier(String title) { this.title=title; }
+        public String title() { return title; }
+        public int number() { return ordinal()+1; }
+        public String numeral() { return Rules.numeral(number()); }
+        public String label() { return numeral()+" — "+title; }
+        public Optional<Tier> next() { return ordinal()+1<values().length?Optional.of(values()[ordinal()+1]):Optional.empty(); }
+        public boolean atLeast(Tier other) { return compareTo(other)>=0; }
+    }
     public enum State {
         PLANNED, WAITING, ASSIGNED, IN_PROGRESS, BLOCKED, COMPLETED, FAILED, CANCELLED;
         public boolean terminal() { return this == COMPLETED || this == FAILED || this == CANCELLED; }
@@ -15,7 +27,13 @@ public final class Model {
         MISSING_RESOURCE, MISSING_TOOL, NO_QUALIFIED_WORKER, WORKER_UNAVAILABLE,
         NO_VALID_SITE, PATH_UNREACHABLE, CHUNK_UNAVAILABLE, BUILD_SITE_OBSTRUCTED,
         DEPENDENCY_BLOCKED, TARGET_MISSING, STORAGE_FULL, STORAGE_MISSING,
-        RETRY_LIMIT_REACHED, WORLD_CHANGED, UNKNOWN
+        RETRY_LIMIT_REACHED, WORLD_CHANGED, UNKNOWN,
+        /** Village tier or technology does not yet permit the activity. */
+        CAPABILITY_LOCKED,
+        /** Capability is unlocked but required physical infrastructure is absent. */
+        INFRASTRUCTURE_MISSING,
+        /** A progression or technology requirement is not met by the current world state. */
+        REQUIREMENT_UNMET
     }
     public record Pos(int x, int y, int z) {
         public Pos offset(int dx, int dy, int dz) { return new Pos(x+dx,y+dy,z+dz); }
@@ -36,6 +54,8 @@ public final class Model {
                         UUID target, String message, Map<String,String> parameters) {}
     public record Goal(Need need, double urgency, double feasibility, double cooldown,
                        double utility, String explanation) {}
+    /** Permanent record of an unlocked technology; never removed by later world changes. */
+    public record TechnologyRecord(String technology, long unlockedAt, UUID plan, UUID researcher) {}
 
     public static final class Citizen {
         public UUID id, village, currentTask;
@@ -92,12 +112,18 @@ public final class Model {
         public Pos workOrigin;
         public long actionStarted;
         public int scanCursor;
+        /** Minimum role level required in addition to built-in item rules (research, diamonds). */
+        public int minimumLevel;
         public List<Pos> targets = new ArrayList<>();
     }
     public static final class Plan extends Work {
         public UUID village;
         public Need need;
         public String kind, blueprint;
+        /** Material palette selected once for construction/recipes; persisted for resume. */
+        public String palette;
+        /** Technology researched by a RESEARCH plan. */
+        public String technology;
         public Goal goal;
         public double priority;
         public int totalWork;
@@ -110,6 +136,8 @@ public final class Model {
     public static final class Building {
         public UUID id, village, plan;
         public String blueprint, category, condition="COMPLETE";
+        /** Palette the building was constructed with; inspection compares against it. */
+        public String palette=Palettes.DEFAULT;
         public Pos origin, entrance;
         public long completedAt;
     }
@@ -126,6 +154,19 @@ public final class Model {
         public List<Event> history = new ArrayList<>();
         public Map<Need,Double> needs = new EnumMap<>(Need.class);
         public List<Goal> goals = new ArrayList<>();
+        /** Highest tier ever reached. It is historical and never decreases. */
+        public Tier tier = Tier.SETTLEMENT;
+        /** Tier name -> game tick when it was first reached. Guards against duplicate milestones. */
+        public Map<String,Long> tierHistory = new TreeMap<>();
+        /** Item id -> amount physically produced by village work (loot, smelting, crafting). */
+        public Map<String,Long> production = new TreeMap<>();
+        /** Technology id -> permanent unlock record. */
+        public Map<String,TechnologyRecord> technologies = new TreeMap<>();
+        /** Most recent local palette choice and its candidate scores (diagnostic). */
+        public String palette = Palettes.DEFAULT;
+        public Map<String,Double> paletteScores = new TreeMap<>();
+        /** Last progression evaluation; rebuilt by the strategic tick and on demand. */
+        public transient dev.livingvillages.progression.VillageProgressionSnapshot progression;
         private transient Map<UUID,Plan> liveIndex=new LinkedHashMap<>();
         private transient Map<String,Plan> latestKind=new HashMap<>();
         private transient int indexedPlanCount=-1;
@@ -157,8 +198,9 @@ public final class Model {
         public long population() { return citizens.values().stream().filter(c->!c.dead).count(); }
     }
     public static final class World {
-        public int version=1;
+        public int version=StateCodec.VERSION;
         public Map<UUID,Village> villages = new LinkedHashMap<>();
         public transient List<String> recoveryNotes=new ArrayList<>();
+        public transient List<String> migrationNotes=new ArrayList<>();
     }
 }

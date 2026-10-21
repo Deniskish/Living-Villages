@@ -18,14 +18,15 @@ public final class Simulation {
     private Blueprints blueprints;
     private VillagePlanner planner;
     private ConstructionJob construction;
+    private final ProgressionService progression=new ProgressionService(chronicle);
     private final Job harvest=new HarvestJob(),production=new ProductionJob(),animals=new AnimalJob(),utility=new PlaceUtilityJob(),
-            smelting=new SmeltingJob(),population=new PopulationJob(),wool=new WoolJob(),road=new RoadJob();
+            smelting=new SmeltingJob(),population=new PopulationJob(),wool=new WoolJob(),road=new RoadJob(),research=new ResearchJob();
     private long workerCursor;
     public void clear() { observations.clear();blueprints=null;planner=null;construction=null; }
     public void tick(ServerLevel level) {
         if(!level.getServer().isSameThread())throw new IllegalStateException("Village simulation must run on the server thread");
         if(level.getGameTime()%10!=0)return;
-        if(blueprints==null) { blueprints=new Blueprints();planner=new VillagePlanner(chronicle,blueprints);construction=new ConstructionJob(blueprints); }
+        if(blueprints==null) { blueprints=new Blueprints();planner=new VillagePlanner(chronicle,blueprints,progression);construction=new ConstructionJob(blueprints); }
         VillageSavedData data=VillageSavedData.get(level);
         if(level.getGameTime()%200==0)discovery.discover(level,data.world);
         var indexes=observations.computeIfAbsent(level,k->new HashMap<>());
@@ -115,8 +116,8 @@ public final class Simulation {
                 .ifPresent(home->citizenHome(v,worker.getUUID(),Positions.of(home.pos())));
         WorkContext context=new WorkContext(level,v,p,task,citizen,worker,observations,chronicle);
         if(task.nextRetryTick>0) { task.attemptStartedAt=now;task.nextRetryTick=0; }
-        Job job=p.blueprint!=null?construction:p.kind.startsWith("CRAFT:")?production:p.kind.startsWith("PLACE:")?utility:
-                p.kind.equals("SMELT_IRON")?smelting:p.kind.equals("FEED_CITIZENS")?population:
+        Job job=p.blueprint!=null?construction:p.technology!=null?research:p.kind.startsWith("CRAFT:")?production:p.kind.startsWith("PLACE:")?utility:
+                p.kind.equals("SMELT_IRON")||p.kind.equals("SMELT_CHARCOAL")?smelting:p.kind.equals("FEED_CITIZENS")?population:
                 p.kind.equals("SHEAR")?wool:p.kind.startsWith("ROAD:")?road:task.role==Role.ANIMAL_KEEPER?animals:harvest;
         long started=System.nanoTime();v.workerSteps++;
         try { job.tick(context); }
@@ -130,10 +131,26 @@ public final class Simulation {
         }
     }
     private static void citizenHome(Village v,UUID citizen,Pos home) { v.citizens.get(citizen).home=home; }
-    private static boolean qualified(Citizen c,Task task) {
+    /** Worker assignment rule: role level must meet built-in item rules and the task minimum. */
+    public static boolean qualified(Citizen c,Task task) {
         int minimum=task.role==Role.MINER&&task.desiredResource.equals("minecraft:raw_iron")?3:
                 task.role==Role.SMITH&&task.item.contains("iron_")?3:1;
-        return Rules.level(c.experience.getOrDefault(task.role,0L))>=minimum;
+        return Rules.level(c.experience.getOrDefault(task.role,0L))>=Math.max(minimum,task.minimumLevel);
+    }
+    /**
+     * Production record for loot from blocks a citizen broke. Uses NeoForge's final drop list
+     * (lowest priority, cancelled events ignored), so only items that physically dropped count.
+     */
+    public void drops(net.neoforged.neoforge.event.level.BlockDropsEvent event) {
+        if(event.isCanceled()||!(event.getBreaker() instanceof Villager worker)||event.getDrops().isEmpty())return;
+        var data=VillageSavedData.get(event.getLevel());
+        for(Village v:data.world.villages.values()) {
+            Citizen c=v.citizens.get(worker.getUUID());
+            if(c==null||c.dead)continue;
+            for(var drop:event.getDrops())
+                ProgressionService.recordProduction(chronicle,v,dev.livingvillages.resource.Inventories.id(drop.getItem()),drop.getItem().getCount(),event.getLevel().getGameTime());
+            data.setDirty();return;
+        }
     }
     public void death(LivingEntity entity) {
         if(!(entity instanceof Villager worker)||!(entity.level() instanceof ServerLevel level))return;

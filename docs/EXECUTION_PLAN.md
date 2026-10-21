@@ -147,3 +147,48 @@ phases. Final evidence is in .tools/hardening-final.log and
 run-restart-20261020-170707. README, CHANGELOG, architecture review and acceptance
 matrix are updated. The existing v1.1 backlog is unchanged: no newly discovered
 future gameplay task justified expanding it during this pass.
+
+## v1.1 progression milestone (branch `feature/v1.1-progression`)
+
+Baseline: commit `75f9806` on `main`. Verified on this workspace (macOS, Temurin
+21) before changes: `gradlew test build` **BUILD SUCCESSFUL**, 13 JUnit tests.
+Requirements re-read: AGENTS, README, GAME_RULES, SPECIFICATION, ARCHITECTURE,
+V1_SCOPE, V1_1_BACKLOG, ACCEPTANCE_RESULTS, MANUAL_ACCEPTANCE,
+ARCHITECTURE_REVIEW and this plan. Final specification: `V1_1_SPEC.md`.
+
+Out of scope for this milestone: soldiers, archers, raids, war, diplomacy,
+leaders/kings, kingdoms, colonies, walls and Nether expeditions. Technology
+branches and capabilities are open enumerations so a military branch can be
+added later without changing persistence or the planner contract.
+
+Dependency-ordered work:
+
+1. **Ledger layout fix** (independent): pure `LedgerLayout` geometry (header,
+   refresh, wrapped or compact tabs, content viewport, scrollbar, footer);
+   screen uses it for widgets, clipping, row hit-testing and scrolling. Pure
+   refresh routing (open / update / ignore). Unit tests over GUI scale 1–4/Auto
+   for common window sizes. Visual acceptance stays MANUAL_REQUIRED.
+2. **Schema v2 + migration** (foundation for 3–6): tier, tier milestones,
+   production record, technologies, palettes on plans/buildings, task minimum
+   level. Explicit v1→v2 migration (v1 construction and buildings are oak);
+   unknown future versions are still rejected. Migration unit tests.
+3. **Pure progression domain** (2): requirement records, village facts,
+   cumulative tier requirements I–V, capability policy, technology registry and
+   policy, palette tokens/selector, production categories. Unit tests for every
+   boundary, diagnostics and monotonic (non-oscillating) unlocks.
+4. **Physical production record** (2): record items at the physical source
+   (loot from broken blocks, furnace output, crafted output, collected wool).
+   No counters change without a world action.
+5. **Palettes and variants** (2,3): semantic blueprint tokens resolved by palette;
+   persisted per plan/building; palette-aware recipes; t2 house unlocked by
+   ADVANCED_CONSTRUCTION. Old v1 templates resolve identically with oak.
+6. **Planner integration** (3,4,5): low-frequency progression evaluation and
+   level-up events; capability checks instead of tier numbers; research plans
+   with reservations, workstation dependencies and a physical research executor;
+   charcoal fuel; deeper mining band; diamond mining plan and executor gates.
+7. **Ledger Progression tab, commands, diagnostics** (3,6): read-only
+   `/livingvillages progression inspect`; shared diagnostic tree.
+8. **GameTests** for tiers, technology, restart, palettes, diamonds and Ledger
+   bounds; v1.0 suite retained.
+9. **Verification**: `test`, `runGameTestServer`, `build`, two-JVM restart;
+   architecture review; documentation; version `1.1.0-dev`.

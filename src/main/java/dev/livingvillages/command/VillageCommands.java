@@ -8,6 +8,8 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import dev.livingvillages.domain.*;
 import dev.livingvillages.domain.Model.*;
 import dev.livingvillages.persistence.VillageSavedData;
+import dev.livingvillages.progression.*;
+import dev.livingvillages.world.ProgressionService;
 import java.util.*;
 import static dev.livingvillages.world.Positions.*;
 public final class VillageCommands {
@@ -21,10 +23,28 @@ public final class VillageCommands {
                         }))
                         .then(Commands.literal("inspect").executes(ctx->{
                             Village v=nearest(ctx.getSource());if(v==null)return 0;
-                            say(ctx.getSource(),v.name+" id="+v.id+" population="+v.population()+" beds="+v.beds);
+                            say(ctx.getSource(),v.name+" id="+v.id+" population="+v.population()+" beds="+v.beds+" tier="+v.tier.label()
+                                    +" technologies="+v.technologies.keySet()+" palette="+v.palette);
                             for(Goal goal:v.goals)say(ctx.getSource(),goal.toString());
                             for(Plan p:v.plans.values())if(!p.state().terminal())say(ctx.getSource(),p.id+" "+p.kind+" "+p.state());return 1;
                         })))
+                // Read-only: tiers and technologies change only through the simulation.
+                .then(Commands.literal("progression").then(Commands.literal("inspect").executes(ctx->{
+                    Village v=nearest(ctx.getSource());
+                    if(v==null) { ctx.getSource().sendFailure(Component.literal("No registered village contains this position"));return 0; }
+                    var stock=dev.livingvillages.resource.Inventories.stock(ctx.getSource().getLevel(),v);
+                    var s=ProgressionService.inspect(ctx.getSource().getLevel(),v,stock);
+                    say(ctx.getSource(),v.name+" tier="+v.tier.label()+" qualifies="+(s.currentTier()==null?"none":s.currentTier().label())
+                            +" next="+(s.nextTier()==null?"none":s.nextTier().label())+" evaluatedAt="+s.evaluatedAt());
+                    Diagnostics.lines(ProgressionDiagnostics.tier(s)).forEach(line->say(ctx.getSource(),line));
+                    for(CapabilityStatus c:s.capabilities())say(ctx.getSource(),c.line());
+                    for(TechnologyStatus t:s.technologies()) {
+                        say(ctx.getSource(),t.technology().branch()+" "+t.line());
+                        if(t.stage()==TechnologyStatus.Stage.LOCKED)
+                            Diagnostics.lines(ProgressionDiagnostics.technology(t,s.evaluatedAt())).stream().skip(1).forEach(line->say(ctx.getSource(),line));
+                    }
+                    return 1;
+                })))
                 .then(Commands.literal("citizen").then(Commands.literal("inspect").then(Commands.argument("target",EntityArgument.entity())
                         .executes(ctx->{
                             UUID id=EntityArgument.getEntity(ctx,"target").getUUID();

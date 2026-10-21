@@ -26,6 +26,8 @@ public final class VillageSavedData extends SavedData {
             String json=tag.contains("state",net.minecraft.nbt.Tag.TAG_BYTE_ARRAY)
                     ?new String(tag.getByteArray("state"),java.nio.charset.StandardCharsets.UTF_8):tag.getString("state");
             data.world=StateCodec.decode(json);
+            for(String note:data.world.migrationNotes)
+                dev.livingvillages.LivingVillagesMod.LOG.info("event=save_migrated {}",note);
             for(String note:data.world.recoveryNotes)
                 dev.livingvillages.LivingVillagesMod.LOG.warn("event=corrupted_reference recovery={}",note);
         }
@@ -36,7 +38,7 @@ public final class VillageSavedData extends SavedData {
         return data;
     }
     @Override public CompoundTag save(CompoundTag tag,HolderLookup.Provider registries) {
-        tag.putInt("dataVersion",1);
+        tag.putInt("dataVersion",dev.livingvillages.domain.StateCodec.VERSION);
         // NBT strings use modified UTF with a 65535-byte limit. Chronicles easily exceed it.
         tag.putByteArray("state",StateCodec.encode(world).getBytes(java.nio.charset.StandardCharsets.UTF_8));
         return tag;

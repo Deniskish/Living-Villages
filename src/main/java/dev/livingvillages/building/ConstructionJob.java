@@ -12,13 +12,13 @@ public final class ConstructionJob implements Job {
     private final SitePlanner sites=new SitePlanner();
     public ConstructionJob(Blueprints blueprints) { this.blueprints=blueprints; }
     @Override public void tick(WorkContext c) {
-        Plan p=c.plan();Task t=c.task();var bp=blueprints.get(p.blueprint);
+        Plan p=c.plan();Task t=c.task();var bp=blueprints.get(p.blueprint,p.palette);
         if(t.progress==0&&t.attempts>=3&&t.blocker!=null&&t.blocker.type()==Reason.PATH_UNREACHABLE)
             p.site=null;
         if(p.site==null) {
             p.site=sites.select(c,bp);
             if(p.site==null) { c.block(Reason.NO_VALID_SITE,"No valid site in candidate batch: "+p.siteRejections);return; }
-            c.progress();c.chronicle().emit(c.village(),c.now(),"BUILDING_STARTED",c.citizen().id,p.id,bp.id()+" at "+p.site);
+            c.progress();c.chronicle().emit(c.village(),c.now(),"BUILDING_STARTED",c.citizen().id,p.id,bp.id()+" ("+bp.palette()+") at "+p.site);
         }
         for(int i=0;i<t.progress;i++) {
             var cell=bp.cells().get(i);BlockPos pos=absolute(p.site,cell.offset());
@@ -77,10 +77,10 @@ public final class ConstructionJob implements Job {
     private static BlockPos absolute(Pos site,Pos offset) { return block(site.offset(offset.x(),offset.y(),offset.z())); }
     private void complete(WorkContext c,Blueprints.Blueprint bp) {
         Building b=new Building();b.id=UUID.randomUUID();b.plan=c.plan().id;b.village=c.village().id;
-        b.blueprint=bp.id();b.category=bp.category();b.origin=c.plan().site;
+        b.blueprint=bp.id();b.category=bp.category();b.origin=c.plan().site;b.palette=bp.palette();
         b.entrance=b.origin.offset(bp.entrance().x(),bp.entrance().y(),bp.entrance().z());b.completedAt=c.now();
         c.village().buildings.put(b.id,b);c.xp(16);
-        c.chronicle().emit(c.village(),c.now(),"BUILDING_COMPLETED",c.citizen().id,b.id,b.blueprint);
+        c.chronicle().emit(c.village(),c.now(),"BUILDING_COMPLETED",c.citizen().id,b.id,b.blueprint+" ("+b.palette+")");
         c.finish();
     }
 }
